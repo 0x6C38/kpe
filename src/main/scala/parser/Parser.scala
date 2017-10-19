@@ -28,13 +28,14 @@ import org.apache.spark.sql.functions.{length, trim, when}
 import org.apache.spark.sql.Column
 import org.apache.log4j.{Level, Logger}
 
+//TODO: Link summarized meanings with result DF
+//TODO: Use the correct column to extract the readings for kanjis since only 1.2k or so are being parsed
 
 //TODO: Add resource files to build
 //TODO: Add more info to the vocabs including: MeaningInEnglish + kuromojiTokens(?) + rankOfKanjis(?)
 //TODO: Get recursive components for kanjis
 //TODO: Add ranks of components for kanjis
 //TODO: Add ranks of readings for kanjis
-//TODO: Consolidate meanings columns
 //TODO: Fix radical column
 //TODO: Write final vocab to file
 //TODO: Write final parse into Kanji class
@@ -114,23 +115,49 @@ object Hello {
     val lvlsRaw = spark.read.json(ScalaConfig.levelsPath)
     val lvls = lvlsRaw.as[KanjiLevel].collect()
 
-    val kanjidic = spark.read.json(ScalaConfig.kanjidicPath)
+    val kanjidic = spark.read.json(ScalaConfig.kanjidicPath) //cannot resolve 'UDF(meanings)' due to data type mismatch: argument 1 requires string type, however, '`meanings`' is of array<struct<m_lang:string,meaning:string>> type.;;
       .withColumnRenamed("jlpt", "kdJlpt")
+      .withColumnRenamed("meanings", "kdMeanings").cache()
     kanjidic.show(7)
+
 
     val allFragmentsLists = spark.read.option("delimiter", ":").format("csv").load(ScalaConfig.KradFN)
       .withColumnRenamed("_c0", "fKanji").withColumnRenamed("_c1", "ffragments")
       .withColumn("fKanji", trim(col("fKanji"))).withColumn("ffragments", trim(col("ffragments"))) //must trim to match
 
 
+    def parseSimpleEnglish(s:String):Seq[(String, String)]  = if (s != null) s.trim.split(", ").map(t => ("en", t)) else Seq[(String,String)]()
+    val toTranslationArray = udf((s:String) => parseSimpleEnglish(s))
     val kanjiAlive = spark.read.json(ScalaConfig.KanjiAliveP).withColumnRenamed("kanji", "kaKanji")
+      .withColumnRenamed("kmeaning", "kaMeanings")
     kanjiAlive.show(8)
+
     val tanosKanji = spark.read.json(ScalaConfig.KanjiTanosPFreq).withColumnRenamed("Kanji", "tanosKanji")
       .withColumnRenamed("jlpt", "tanosJlpt")
       .withColumnRenamed("Kunyomi", "tanosKunyomi")
       .withColumnRenamed("Onyomi", "tanosOnyomi")
+      .withColumnRenamed("English", "tanosMeaning")
+
 
     tanosKanji.show(9)
+
+    def combineAllMeanings(meanings: Seq[Row], tanosMeaning: Seq[(String, String)], kaMeanings: Seq[(String, String)]): Seq[(String, String)] = {
+      val ms = if (meanings != null) meanings.map { case Row(x: String, y: String) => (x, y); case _ => ("", "") } else Seq[(String, String)]()
+      val tns = if (tanosMeaning != null) tanosMeaning else Seq[(String, String)]()
+      val kans = if (kaMeanings != null) kaMeanings else Seq[(String, String)]() //toSet
+      (ms ++ tns ++ kans).toSet.toSeq
+    }
+    val toCombinedMeaningsSet = udf((meanings:Seq[Row], tanosMeaning:Seq[(String,String)], kaMeanings:Seq[(String,String)]) => combineAllMeanings(meanings, tanosMeaning, kaMeanings))
+    val combinedMeanings = kanjidic
+      .join(kanjiAlive, kanjidic("literal") === kanjiAlive("kaKanji"), "left")
+      .join(tanosKanji, kanjidic("literal") === tanosKanji("tanosKanji"), "left")
+      .withColumn("meanings", toCombinedMeaningsSet('kdMeanings, toTranslationArray('tanosMeaning), toTranslationArray('kaMeanings)))
+      .select('literal, 'meanings)
+      //.drop('kdMeanings)
+      //.drop('tanosMeaning)
+      //.drop('kaMeanings)
+    combinedMeanings.show(9)
+
 
     val wikiRadicals = spark.read.json(ScalaConfig.WikiRadsDP)
 
@@ -153,8 +180,8 @@ object Hello {
     //val kanjiVG = spark.read.json(ScalaConfig.KanjiVGDP) //returns empty
 
     // --- Vocabulary ---
-    def filterWord(r:Row):String = getFld(r, "word")
     def getFld(r:Row, name:String) = r.getString(r.fieldIndex(name))
+    def filterWord(r:Row):String = getFld(r, "word")
 
     def containsKanjiFilter(r: Row): Boolean = filterWord(r).containsKanji
 
@@ -238,16 +265,16 @@ object Hello {
 
 
     ///////IMPORTANT:------- UDF MUST NOT THROW ANY INTERNAL EXCEPTIONS; THAT INCLUDES NULL OR THEY WONT WORK---------
-    val mapReadingsUDF = udf((k:String, y:String) => (if (k != null) k.toHiragana() + "、" else "")  + (if (y != null) y.toHiragana() else ""))
+    val mapReadingsUDF = udf((k:String, y:String) => (if (k != null && k.trim != "") k.toHiragana() + "、" else "")  + (if (y != null && y.trim != "") y.toHiragana() else ""))
 
-    val readings = trimmedDF.select('kanji, mapReadingsUDF('kunyomi_ja, 'onyomi_ja) as "readings")
+    val readings = trimmedDF.select('kanji, mapReadingsUDF('kunyomi_ja, 'onyomi_ja) as "readings").filter(r => getFld(r, "readings") != "")
 
-    readings.show(50)
+    readings.show(20)
 
-    //readings.write.csv("readings.csv") ??
+    //readings.coalesce(1).write.csv("outputSF") //readings.csv
 
-    trimmedDF.write.json("output")
-    trimmedDF.coalesce(1).write.json("outputSF")
+//    trimmedDF.write.json("output")
+    //trimmedDF.coalesce(1).write.json("outputSF")
 
     spark.stop
   }

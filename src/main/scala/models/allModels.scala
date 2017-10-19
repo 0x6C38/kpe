@@ -62,6 +62,8 @@ case class KanjiAlive(onyomi_ja:String,
                       radical:String,
                       rad_name_ja:String,
                       rad_stroke:String)
+
+case class TEntry(language:String, word:String)
 object Utils{
   def getInsideParens(s: String): String = {
     val parenth_contents = """.*\(([^)]+)\).*""".r
@@ -75,7 +77,14 @@ object Utils{
     val matched = parenth_contents.findFirstMatchIn(s)
     matched.map(_.group(1)).getOrElse("").tail
   }
+
+
+  def parseCMeanings(s:String):Array[TEntry] = { //Array[Translation]
+    //s.tail.init.split(", ").map(_.trim).map(e => Utils.getStringInbetween(e, '[',']')).map(f => Translation(f.split(",").head, f.split(",")(1)))
+    s.tail.init.split(", ").map(e => e.trim.tail.init.split(",")).map(f => TEntry(f.head, f(1)))
+  }
 }
+
 case class Composition(kanji: String, role:String, phonetics: String, meaning: String)
 object Composition{
   def parseKCompLine(s: String):Composition = {

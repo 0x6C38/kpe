@@ -18,3 +18,21 @@ val exampleStr3 = "聞きます"
 
 "いきます" diff "きます"
 "いきますい".replaceFirst("きます", "")
+
+
+//"[[en,file], [en,russian], [en,something]]".tail.init.split(", ").map(e => e.trim.tail.init.split(",")).map(f => Translation(f.head, f(1)))
+val sample1 = "[[en,file], [en,russian], [en,something]]"
+models.Utils.parseCMeanings(sample1)
+
+def parseSimpleEnglish(s:String):Array[TEntry]  = {
+  s.trim.split(", ").map(t => TEntry("en", t))
+}
+val sample2 = "day, sun, Japan"
+val sample3 = "day"
+
+parseSimpleEnglish(sample2)
+parseSimpleEnglish(sample3)
+
+def parseAllMeanings(meanings:String, English:String, kmeaning:String):Set[TEntry] = {
+  Utils.parseCMeanings(meanings) ++ parseSimpleEnglish(English) ++ parseSimpleEnglish(kmeaning) toSet
+}
