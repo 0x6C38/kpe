@@ -10,6 +10,9 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql._
 import org.apache.spark.sql.expressions.Window
 import com.atilika.kuromoji.ipadic.Tokenizer
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
+
+import scala.collection.mutable
 
 //import bayio.kpe._
 //import bayio.utils.Config
@@ -26,16 +29,15 @@ import org.apache.spark.sql.Column
 import org.apache.log4j.{Level, Logger}
 
 
-
 //TODO: Add resource files to build
-//TODO: Add more info to the vocabs including: Hiragana + Katakana + Romaji + MeaningInEnglish + kuromojiTokens(?) + rankOfKanjis(?)
+//TODO: Add more info to the vocabs including: MeaningInEnglish + kuromojiTokens(?) + rankOfKanjis(?)
 //TODO: Get recursive components for kanjis
 //TODO: Add ranks of components for kanjis
-//TODO: Consolidice meanings columns
+//TODO: Add ranks of readings for kanjis
+//TODO: Consolidate meanings columns
 //TODO: Fix radical column
 //TODO: Write final vocab to file
 //TODO: Write final parse into Kanji class
-//TODO: Make it so that vocabs get rendered into a single output file
 //TODO: Export kanjis
 
 object Hello {
@@ -44,15 +46,20 @@ object Hello {
   import spark.implicits._ //necesary import
 
   //To reduce spark output
+
   import org.apache.log4j.{Level, Logger}
   Logger.getLogger("org").setLevel(Level.WARN)
   Logger.getLogger("akka").setLevel(Level.WARN)
 
-  def extractKanjiFromVocabulary(vs:Dataset[Row]):Array[(FrequentWordRawParse, List[Char])] ={
+
+  def extractKanjiFromVocabulary(vs:Dataset[Row]):Array[(FrequentWordRawParse, Array[Char])] ={
     val vParsed:Array[FrequentWordRawParse] = vs.as[FrequentWordRawParse].collect()
-    val kanjiPerVocab:Array[(FrequentWordRawParse, List[Char])] = vParsed.map((w:FrequentWordRawParse) => (w, w.word.extractKanji))
+    val kanjiPerVocab:Array[(FrequentWordRawParse, Array[Char])] = vParsed.map((w:FrequentWordRawParse) => (w, w.word.extractKanji.toCharArray))
     kanjiPerVocab
   }
+  val extractKanjiFromVocab = udf((word:String) => word.extractKanji.map(_.toString))
+
+  //val avgRankings = udf( (first: String, second: String, third:String, fourth:String) =>  (first.toInt + second.toInt + third.toInt  + fourth.toInt).toDouble / 4 )
   /*def extractVocabularyForKanji(vs:Array[(FrequentWordRawParse, List[Char])]):Array[(Char, Array[FrequentWordRawParse])] = {}*/
 
   def main(args: Array[String]): Unit = {
@@ -128,15 +135,17 @@ object Hello {
     val wikiRadicals = spark.read.json(ScalaConfig.WikiRadsDP)
 
     val tokenizerCache = new Tokenizer()
-    val transliterate = udf((japanese: String) =>  KanaTransliteration(japanese,japanese.toHiragana(tokenizerCache), japanese.toKatakana(tokenizerCache),japanese.toRomaji(tokenizerCache)))
+
+    //def doTransliteration(japanese: String):KanaTransliteration = KanaTransliteration(japanese,japanese.toHiragana(tokenizerCache), japanese.toKatakana(tokenizerCache),japanese.toRomaji(tokenizerCache))
+    val transliterate = udf((japanese: String) =>  KanaTransliteration(japanese):KanaTransliteration)
     val vocabulary = spark.read.json(ScalaConfig.FrequentWordsP)
       .withColumn("internetRank", dense_rank().over(Window.orderBy(col("internetRelative").desc)))
       .withColumn("novelsRank", dense_rank().over(Window.orderBy(col("novelRelative").desc)))
       .withColumn("subtitlesRank", dense_rank().over(Window.orderBy(col("subtitlesRelative").desc)))
       .withColumn("rank", dense_rank().over(Window.orderBy(col("averageRelative").desc)))
-    //.withColumn("hiragana", transliterate(col("word")))
+      .withColumn("transliterations", (transliterate(col("word"))))
 
-    vocabulary.show(10)
+    vocabulary.show(25)
     val tatoes = spark.read.json(ScalaConfig.TatoebaDP)
 
     //--- Errors ---
@@ -151,16 +160,36 @@ object Hello {
 
     val vocabularyWK: Dataset[Row] = vocabulary.filter(r => containsKanjiFilter(r)) //.filter(r => containsJoyoKFilter(r)) //not worth
 
-    val kanjiPerVocab = extractKanjiFromVocabulary(vocabularyWK)
-    val vocabPerKanji: Array[(String, Array[FrequentWordRawParse])] = lvls.take(5).map(l => (l.kanji -> kanjiPerVocab.filter(kpv => kpv._2.contains(l.kanji.trim.head)).map(e => e._1)))
+    //val kanjiPerVocab = extractKanjiFromVocabulary(vocabularyWK)//* REVERSE CHANGES AND MAKE USE OF THIS
+    //val kanjiPerVocab = vocabularyWK.withColumn("kanjis", extractKanjiFromVocab(col("word").as[List[String]]))
+    //kanjiPerVocab.show(60)
+
+    //val vocabPerKanji: Array[(String, Array[FrequentWordRawParse])] = lvls.take(50).map(l => (l.kanji -> kanjiPerVocab.filter(kpv => kpv._2.contains(l.kanji.trim.head)).map(e => e._1)))//*
+    //vocabPerKanji.foreach(v => println(col("_1") + ":" + col("_2").toString()))//*
+    /*
+    val ts = kanjiPerVocab.dtypes
+    val filterCA = udf((k:String, c: mutable.WrappedArray[String]) => (c.contains(k)):Boolean)
+
+    val listContainsK = udf((k:String, c: mutable.WrappedArray[String]) => (c.contains(k)):Boolean)
+
+    //val findVocabForKanji = udf((kanji:String) => kanjiPerVocab.where(array_contains(col("kanjis"), kanji)).collect().map)// r => filterCA(kanji, col("kanjis")))) // .getAs[List[String]]("kanjis").contains(kanji))
+
+    val vocabPerKanji = lvlsRaw.withColumn("vocabulary", findVocabForKanji(col("kanji")))
+    //println(kanjiPerVocab.count())
+    val vocabPerKanji = kanjiPerVocab.joinWith(lvlsRaw, listContainsK(lvlsRaw("kanji"), kanjiPerVocab("kanjis"))).orderBy(col("_2")) //array_contains(kanjiPerVocab("kanjis"), lvlsRaw("kanji")))
+    //vocabPerKanji.groupBy(col("_2"))
+    vocabPerKanji.show(16)
+    println(vocabPerKanji.count())
+  */
 
     //val vocabSpark = spark.sparkContext.parallelize(vocabPerKanji).toDS()
     //val ts = vocabSpark.dtypes
     //val vocabPerKanji:Array[(Char, Array[FrequentWordRawParse])] = extractVocabularyForKanji(kanjiPerVocab)
-    vocabPerKanji.foreach(v => println(v._1 + ":" + v._2.map(_.word).mkString(",")))
+    //vocabPerKanji.foreach(v => println(v._1 + ":" + v._2.map(_.word).mkString(",")))
+    //vocabPerKanji.foreach(v => println(col("kanji") + ":" + col("vocabulary").toString()))
 
-    val vocabSpark = spark.createDataset(vocabPerKanji)
-    //val ts = vocabSpark.dtypes
+    //val vocabSpark = spark.createDataset(vocabPerKanji)//*
+    //val vocabSpark = vocabPerKanji
 
     val translationsDictionary = spark.read.json(ScalaConfig.JmDicP) //incorrect formatting
 
@@ -171,7 +200,8 @@ object Hello {
       .join(kanjiAlive, lvlsRaw("kanji") === kanjiAlive("kaKanji"), "left")
       .join(comps,      lvlsRaw("kanji") === comps("cKanji"),     "left")
       .join(kanjiFreqs, lvlsRaw("kanji") === kanjiFreqs("freqKanji"),"left")
-      .join(vocabSpark, lvlsRaw("kanji") === vocabSpark("_1"),"left")
+      .cache
+      //.join(vocabSpark, lvlsRaw("kanji") === vocabSpark("_1"),"left") //Correct _1 name //*
 
     rawJointDF.show()
     val jointDF = rawJointDF.drop(col("fragments"))
@@ -206,7 +236,18 @@ object Hello {
 
     trimmedDF.show(50)
 
+
+    ///////IMPORTANT:------- UDF MUST NOT THROW ANY INTERNAL EXCEPTIONS; THAT INCLUDES NULL OR THEY WONT WORK---------
+    val mapReadingsUDF = udf((k:String, y:String) => (if (k != null) k.toHiragana() + "、" else "")  + (if (y != null) y.toHiragana() else ""))
+
+    val readings = trimmedDF.select('kanji, mapReadingsUDF('kunyomi_ja, 'onyomi_ja) as "readings")
+
+    readings.show(50)
+
+    //readings.write.csv("readings.csv") ??
+
     trimmedDF.write.json("output")
+    trimmedDF.coalesce(1).write.json("outputSF")
 
     spark.stop
   }

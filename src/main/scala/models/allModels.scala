@@ -22,6 +22,20 @@ case class FrequentWordRawParse(averageRelative: String,
                                 subtitlesRank:String,
                                 rank:String)
 
+case class FrequentWordRawParse2(averageRelative: String,
+                                 internetOcurrences: String,
+                                 internetRelative: String,
+                                 novelOcurrences: String,
+                                 novelRelative: String,
+                                 subtitlesOcurrences: String,
+                                 subtitlesRelative: String,
+                                 word: String,
+                                 internetRank:String,
+                                 novelsRank:String,
+                                 subtitlesRank:String,
+                                 rank:String,
+                                 kanjis:List[String])
+
 case class TanosKanji(Kunyomi:String, jlpt:Int, Onyomi:String, Kanji:String, English:String)
 
 case class Tatoeba(secondId:String,

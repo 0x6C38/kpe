@@ -1,5 +1,8 @@
 package models
 
+import com.atilika.kuromoji.ipadic.Tokenizer
+import sjt.JapaneseInstances._
+import sjt.JapaneseSyntax._
 //import bayio.kpe.{Frequency, Word}
 case class KanjiLevel(kanji:String, level:BigInt)
 
@@ -7,7 +10,13 @@ case class Meaning(language:String, meaning:String)
 case class KunYomi(hiragana:String, romaji:String)
 case class OnYomi(katakana:String, romaji:String)
 
-case class KanaTransliteration(original:String, katakana:String, hiragana:String, romaji:String)
+case class KanaTransliteration(original:String, katakana:String, hiragana:String, romaji:String) extends Serializable
+object KanaTransliteration{
+  val tokenizerCache = new Tokenizer()
+  def apply(s:String) = {
+    new KanaTransliteration(s, s.toHiragana(tokenizerCache), s.toKatakana(tokenizerCache), s.toRomaji(tokenizerCache))
+  }
+}
 case class Translation(english:String, japanese:String, kanaTranslation: KanaTransliteration)
 case class Word(translation:Translation, frequency:WordFrequency)
 
