@@ -67,6 +67,9 @@ object Hello {
     //val logFile = "/opt/spark-2.1.0-bin-hadoop2.7/README.md" // Should be some file on your system
     //val conf = new SparkConf().setMaster("local[*]").setAppName("Simple Application")
 
+    def getFld(r:Row, name:String) = r.getString(r.fieldIndex(name))
+    def filterWord(r:Row):String = getFld(r, "word")
+
     //--- Kanji Frequency ---
     val toDbl    = udf[Double, String]( _.toDouble)
 
@@ -148,15 +151,17 @@ object Hello {
       (ms ++ tns ++ kans).toSet.toSeq
     }
     val toCombinedMeaningsSet = udf((meanings:Seq[Row], tanosMeaning:Seq[(String,String)], kaMeanings:Seq[(String,String)]) => combineAllMeanings(meanings, tanosMeaning, kaMeanings))
+
+    //println("kd meanings count: " + kanjidic.filter(r => getFld(r, "kdMeanings") != "").count)
     val combinedMeanings = kanjidic
-      .join(kanjiAlive, kanjidic("literal") === kanjiAlive("kaKanji"), "left")
-      .join(tanosKanji, kanjidic("literal") === tanosKanji("tanosKanji"), "left")
+      .join(kanjiAlive, kanjidic("literal") === kanjiAlive("kaKanji"), "fullouter")
+      .join(tanosKanji, kanjidic("literal") === tanosKanji("tanosKanji"), "fullouter")
       .withColumn("meanings", toCombinedMeaningsSet('kdMeanings, toTranslationArray('tanosMeaning), toTranslationArray('kaMeanings)))
       .select('literal, 'meanings)
-      //.drop('kdMeanings)
-      //.drop('tanosMeaning)
-      //.drop('kaMeanings)
+      .withColumnRenamed("literal", "cmLiteral")
+      .alias("combinedMeanings")
     combinedMeanings.show(9)
+
 
 
     val wikiRadicals = spark.read.json(ScalaConfig.WikiRadsDP)
@@ -180,8 +185,7 @@ object Hello {
     //val kanjiVG = spark.read.json(ScalaConfig.KanjiVGDP) //returns empty
 
     // --- Vocabulary ---
-    def getFld(r:Row, name:String) = r.getString(r.fieldIndex(name))
-    def filterWord(r:Row):String = getFld(r, "word")
+
 
     def containsKanjiFilter(r: Row): Boolean = filterWord(r).containsKanji
 
@@ -221,12 +225,13 @@ object Hello {
     val translationsDictionary = spark.read.json(ScalaConfig.JmDicP) //incorrect formatting
 
     // --- Final Data Joins ---
-    val rawJointDF = lvlsRaw.join(kanjidic, lvlsRaw("kanji") === kanjidic("literal"), "left")
+    val rawJointDF = lvlsRaw.alias("levelRaw").join(kanjidic, lvlsRaw("kanji") === kanjidic("literal"), "left")
       .join(allFragmentsLists, lvlsRaw("kanji") === allFragmentsLists("fKanji"), "left")
       .join(tanosKanji, lvlsRaw("kanji") === tanosKanji("tanosKanji"), "left")
       .join(kanjiAlive, lvlsRaw("kanji") === kanjiAlive("kaKanji"), "left")
       .join(comps,      lvlsRaw("kanji") === comps("cKanji"),     "left")
       .join(kanjiFreqs, lvlsRaw("kanji") === kanjiFreqs("freqKanji"),"left")
+      .join(combinedMeanings, col("levelRaw.kanji") === col("combinedMeanings.cmLiteral"), "left")
       .cache
       //.join(vocabSpark, lvlsRaw("kanji") === vocabSpark("_1"),"left") //Correct _1 name //*
 
@@ -252,6 +257,10 @@ object Hello {
       .drop(col("tanosOnyomi"))
       .drop(col("kgrade"))
       .drop(col("kstroke"))
+      .drop('kdMeanings) //drops redundant meanings columns
+      .drop('tanosMeaning)
+      .drop('kaMeanings)
+      .drop("cmLiteral")
     //.orderBy(col("jlpt")) //can't resolve
 
     jointDF.show()
@@ -263,13 +272,14 @@ object Hello {
 
     trimmedDF.show(50)
 
+    println("TrimmedDF Count: " + trimmedDF.count()) //expensive
 
     ///////IMPORTANT:------- UDF MUST NOT THROW ANY INTERNAL EXCEPTIONS; THAT INCLUDES NULL OR THEY WONT WORK---------
     val mapReadingsUDF = udf((k:String, y:String) => (if (k != null && k.trim != "") k.toHiragana() + "、" else "")  + (if (y != null && y.trim != "") y.toHiragana() else ""))
 
     val readings = trimmedDF.select('kanji, mapReadingsUDF('kunyomi_ja, 'onyomi_ja) as "readings").filter(r => getFld(r, "readings") != "")
-
     readings.show(20)
+    println("Number of readings: " + readings.count()) //expensive
 
     //readings.coalesce(1).write.csv("outputSF") //readings.csv
 
