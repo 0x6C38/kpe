@@ -28,8 +28,7 @@ import org.apache.spark.sql.functions.{length, trim, when}
 import org.apache.spark.sql.Column
 import org.apache.log4j.{Level, Logger}
 
-//TODO: Link summarized meanings with result DF
-//TODO: Use the correct column to extract the readings for kanjis since only 1.2k or so are being parsed
+//TODO: Fix Kun/onYomi shit
 
 //TODO: Add resource files to build
 //TODO: Add more info to the vocabs including: MeaningInEnglish + kuromojiTokens(?) + rankOfKanjis(?)
@@ -120,9 +119,11 @@ object Hello {
 
     val kanjidic = spark.read.json(ScalaConfig.kanjidicPath) //cannot resolve 'UDF(meanings)' due to data type mismatch: argument 1 requires string type, however, '`meanings`' is of array<struct<m_lang:string,meaning:string>> type.;;
       .withColumnRenamed("jlpt", "kdJlpt")
-      .withColumnRenamed("meanings", "kdMeanings").cache()
-    kanjidic.show(7)
+      .withColumnRenamed("meanings", "kdMeanings")
+      .withColumnRenamed("readings", "kdReadings").cache()
 
+    kanjidic.show(7) //reading:ア, r_type:ja_on r_type:ja_kun
+    println("Number of kanjidic: " + kanjidic.count()) //expensive
 
     val allFragmentsLists = spark.read.option("delimiter", ":").format("csv").load(ScalaConfig.KradFN)
       .withColumnRenamed("_c0", "fKanji").withColumnRenamed("_c1", "ffragments")
@@ -133,7 +134,10 @@ object Hello {
     val toTranslationArray = udf((s:String) => parseSimpleEnglish(s))
     val kanjiAlive = spark.read.json(ScalaConfig.KanjiAliveP).withColumnRenamed("kanji", "kaKanji")
       .withColumnRenamed("kmeaning", "kaMeanings")
+
     kanjiAlive.show(8)
+    println("Number of kanjiAlive: " + kanjiAlive.count()) //expensive
+
 
     val tanosKanji = spark.read.json(ScalaConfig.KanjiTanosPFreq).withColumnRenamed("Kanji", "tanosKanji")
       .withColumnRenamed("jlpt", "tanosJlpt")
@@ -224,6 +228,55 @@ object Hello {
 
     val translationsDictionary = spark.read.json(ScalaConfig.JmDicP) //incorrect formatting
 
+    def parseKunToArray(k:String):Array[String] = if (k != null && k.trim != "") k.split("、") else Array[String]()
+    def parseOnToArray(o:String):Array[String] = if (o != null && o.trim != "") o.split("、") else Array[String]()
+    def parseKDToArray(rs:Seq[Row]) = rs.flatMap {
+      case Row(x: String, y: String) if (x == "ja_on" || x == "ja_kun" && y != "") => (Some(y.toHiragana().split("。").head)) // .replace("-", "") //ignores endings & positions in kanjidic
+      case _ => None
+    }
+
+
+    val mapKDReadings = udf((rs:Seq[Row], k:String, y:String) => {
+      val ks = if (k != null && k.trim != "") k.split("、").map(_.toHiragana()) else Array[String]()
+      val ys = if (y != null && y.trim != "") y.split("、").map(_.toHiragana()) else Array[String]()
+      val kdics = rs.flatMap {
+        case Row(x: String, y: String) if (x == "ja_on" || x == "ja_kun" && y != "") => (Some(y.toHiragana().split("。").head)) // .replace("-", "") //ignores endings & positions in kanjidic
+        case _ => None
+      }
+      (ks ++ ys ++ kdics).toSet.toSeq
+    }
+    )
+
+    val mapKDReadingsKun = udf((rs:Seq[Row], k:String) => {
+      val ks:Seq[String] = if (k != null && k.trim != "") k.split("、").toSeq else Seq[String]()
+      val kdics:Seq[String] = rs.flatMap {
+        case Row(x: String, y: String) if (x == "ja_kun" && y != "" && y != "-" && y != ".") => (Some(y)) // .replace("-", "") //ignores endings & positions in kanjidic
+        case _ => None
+      }
+      (ks ++ kdics).toSet.toSeq
+    }:Seq[String]
+    )
+
+    val mapKDReadingsOn = udf((rs:Seq[Row], y:String) => {
+      val ys:Seq[String] = if (y != null && y.trim != "") y.split("、").toSeq else Seq[String]()
+      val kdics:Seq[String] = rs.flatMap {
+        case Row(x: String, y: String) if (x == "ja_on" && y != "" && y != "-" && y != ".") => (Some(y)) // .replace("-", "") //ignores endings & positions in kanjidic
+        case _ => None
+      }
+      (ys ++ kdics).toSet.toSeq
+    }:Seq[String]
+    )
+
+    // -- Reading joins --
+    val readingsDF = lvlsRaw.join(kanjidic, lvlsRaw("kanji") === kanjidic("literal"), "left")
+                            .join(kanjiAlive, lvlsRaw("kanji") === kanjiAlive("kaKanji"), "left")
+                            .select('kanji as "readingsKanji", mapKDReadings('kdReadings, 'kunyomi_ja, 'onyomi_ja) as "readings", 'kunyomi_ja, 'onyomi_ja)
+                            .select('readingsKanji, mapKDReadingsKun('readingsKanji, 'kunyomi_ja) as "kunReadings", 'kunyomi_ja, 'onyomi_ja) //these two are fucked up
+                            .select('readingsKanji, 'kunReadings ,mapKDReadingsOn('readingsKanji, 'onyomi_ja) as "onReadings")
+
+    //val mappedR = jointDF.select('kanji, mapKDReadings('kdReadings, 'kunyomi_ja, 'onyomi_ja))
+    readingsDF.show(21)
+
     // --- Final Data Joins ---
     val rawJointDF = lvlsRaw.alias("levelRaw").join(kanjidic, lvlsRaw("kanji") === kanjidic("literal"), "left")
       .join(allFragmentsLists, lvlsRaw("kanji") === allFragmentsLists("fKanji"), "left")
@@ -232,10 +285,11 @@ object Hello {
       .join(comps,      lvlsRaw("kanji") === comps("cKanji"),     "left")
       .join(kanjiFreqs, lvlsRaw("kanji") === kanjiFreqs("freqKanji"),"left")
       .join(combinedMeanings, col("levelRaw.kanji") === col("combinedMeanings.cmLiteral"), "left")
+      .join(readingsDF, col("levelRaw.kanji") === readingsDF("readingsKanji"), "left")
       .cache
       //.join(vocabSpark, lvlsRaw("kanji") === vocabSpark("_1"),"left") //Correct _1 name //*
 
-    rawJointDF.show()
+    rawJointDF.show(22)
     val jointDF = rawJointDF.drop(col("fragments"))
       .drop(col("isEUCJP"))
       .drop(col("isKANGXI"))
@@ -261,13 +315,16 @@ object Hello {
       .drop('tanosMeaning)
       .drop('kaMeanings)
       .drop("cmLiteral")
+      .drop('readingsKanji) //drops redundant readings columns
+      .drop(col("kdReadings"))
+      .drop(col("kunyomi_ja"))
+      .drop(col("onyomi_ja"))
     //.orderBy(col("jlpt")) //can't resolve
 
-    jointDF.show()
+    jointDF.show(23)
 
     val trimmedDF = jointDF.drop(col("dic_numbers"))
       .drop(col("query_codes"))
-      .drop(col("readings"))
       .orderBy(col("rank"))
 
     trimmedDF.show(50)
@@ -275,13 +332,10 @@ object Hello {
     println("TrimmedDF Count: " + trimmedDF.count()) //expensive
 
     ///////IMPORTANT:------- UDF MUST NOT THROW ANY INTERNAL EXCEPTIONS; THAT INCLUDES NULL OR THEY WONT WORK---------
-    val mapReadingsUDF = udf((k:String, y:String) => (if (k != null && k.trim != "") k.toHiragana() + "、" else "")  + (if (y != null && y.trim != "") y.toHiragana() else ""))
+    readingsDF.show(20)
+    println("Number of readings: " + readingsDF.count()) //expensive
 
-    val readings = trimmedDF.select('kanji, mapReadingsUDF('kunyomi_ja, 'onyomi_ja) as "readings").filter(r => getFld(r, "readings") != "")
-    readings.show(20)
-    println("Number of readings: " + readings.count()) //expensive
-
-    //readings.coalesce(1).write.csv("outputSF") //readings.csv
+    //readingsDF.coalesce(1).write.csv("outputSF") //readings.csv
 
 //    trimmedDF.write.json("output")
     //trimmedDF.coalesce(1).write.json("outputSF")
