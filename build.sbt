@@ -36,9 +36,7 @@ libraryDependencies += "org.apache.hadoop" % "hadoop-yarn-common" % "2.8.0"
 libraryDependencies += "org.apache.hadoop" % "hadoop-yarn-client" % "2.8.0"
 
 
-addCompilerPlugin(
-  "org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full
-)
+addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
 
 //libraryDependencies += "io.localKanji" %% "sjt" % "1.0"
 libraryDependencies += "io.localKanji" %% "sjt" % "latest.[any status]"
