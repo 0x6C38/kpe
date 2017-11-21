@@ -176,18 +176,42 @@ object Hello {
     val wikiRadicals = spark.read.json(ScalaConfig.WikiRadsDP)
 
     val tokenizerCache = new Tokenizer()
-
+    println("Now calculating vocabulary and whatnot")
     //def doTransliteration(japanese: String):KanaTransliteration = KanaTransliteration(japanese,japanese.toHiragana(tokenizerCache), japanese.toKatakana(tokenizerCache),japanese.toRomaji(tokenizerCache))
+    val uFurigana = udf((word:String) => word.furigana().map(f => (f.original, f.kana.hiragana)))
     val uTransliterate = udf((japanese: String) =>  KanaTransliteration(japanese):KanaTransliteration)
     val uTransliterateA = udf((js: Seq[String]) =>  js.map(japanese => KanaTransliteration(japanese):KanaTransliteration))
+    val uSum3 = udf((a:Int, b:Int, c:Int) => a+b+c)
     val vocabulary = spark.read.json(ScalaConfig.FrequentWordsP)
       .withColumn("internetRank", dense_rank().over(Window.orderBy(col("internetRelative").desc)))
       .withColumn("novelsRank", dense_rank().over(Window.orderBy(col("novelRelative").desc)))
       .withColumn("subtitlesRank", dense_rank().over(Window.orderBy(col("subtitlesRelative").desc)))
       .withColumn("rank", dense_rank().over(Window.orderBy(col("averageRelative").desc)))
       .withColumn("transliterations", (uTransliterate(col("word"))))
+      .withColumn("furigana", (uFurigana('word)))
+      .withColumn("totalOcurrences", uSum3('internetOcurrences, 'novelOcurrences, 'subtitlesOcurrences))
+      .cache()
+    vocabulary.show(300)
 
-    vocabulary.show(25)
+    /* Does this even Work */
+    //val kanjiReadings = vocabulary.select('word, 'totalOcurrences, explode('furigana) as "furigana")
+    //kanjiReadings.show(300)
+
+    val uExtractKanji = udf((r:Row) => r match {
+      case Row(x: String, y: String) => x: String
+      case _ => ""
+    })
+    val flatten = udf((xs: Seq[Seq[(String,String)]]) => xs.flatten)
+    val kanjiReadings = vocabulary.select('word, 'totalOcurrences, explode('furigana) as "furigana")
+      .groupBy('furigana)
+      .agg(sum('totalOcurrences) as "Occ")
+      .orderBy('furigana)
+      .withColumn("k", uExtractKanji('furigana))
+      .groupBy('k)
+      .agg(collect_list(struct('furigana, 'Occ)) as "readingsWFreq") //if doesn't work remove struct
+
+    kanjiReadings.show(500)
+
     val tatoes = spark.read.json(ScalaConfig.TatoebaDP)
 
     //--- Errors ---
@@ -293,6 +317,7 @@ object Hello {
       .join(kanjiFreqs, lvlsRaw("kanji") === kanjiFreqs("freqKanji"),"left")
       .join(combinedMeanings, col("levelRaw.kanji") === col("combinedMeanings.cmLiteral"), "left")
       .join(readingsDF, col("levelRaw.kanji") === readingsDF("readingsKanji"), "left")
+      .join(kanjiReadings, lvlsRaw("kanji") === kanjiReadings("k"))
       .cache
       //.join(vocabSpark, lvlsRaw("kanji") === vocabSpark("_1"),"left") //Correct _1 name //*
 
@@ -329,6 +354,7 @@ object Hello {
       .drop(col("kaKunYomi"))
       .drop(col("kaOnYomi"))
       .drop('readings)
+      .drop('k)
     //.orderBy(col("jlpt")) //can't resolve
 
     jointDF.show(23)
@@ -347,11 +373,12 @@ object Hello {
 
     //PROBLEM after flatmaping jcommas
     val uMkStr = udf((a:Seq[String]) => a.mkString(","))
+
     readingsDF.select('readingsKanji, uMkStr('readings) as "readings").coalesce(1).write.csv("outputSF") //readings.csv
 
 
-//    trimmedDF.write.json("output")
-    //trimmedDF.coalesce(1).write.json("outputSF")
+   trimmedDF.write.json("output")
+   trimmedDF.coalesce(1).write.json("outputSF")
 
     spark.stop
   }
