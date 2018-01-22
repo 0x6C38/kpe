@@ -28,14 +28,18 @@ libraryDependencies += "org.scalaz" %% "scalaz-concurrent" % "7.2.14"
 
 //unmanagedJars in Compile += file("lib/kpe-1.0.25.jar")
 */
-// Change this to another test framework if you prefer
+
 libraryDependencies += "com.atilika.kuromoji" % "kuromoji-ipadic" % "0.9.0"
+// Change this to another test framework if you prefer
 //libraryDependencies += "org.scalatest" %% "scalatest" % "2.2.4" % "test"
 libraryDependencies += "org.apache.spark" %% "spark-core" % "2.2.0"
 libraryDependencies += "org.apache.spark" %% "spark-sql" % "2.2.0"
 
 libraryDependencies += "org.apache.hadoop" % "hadoop-yarn-common" % "2.8.0"
 libraryDependencies += "org.apache.hadoop" % "hadoop-yarn-client" % "2.8.0"
+
+//XML support
+libraryDependencies += "com.databricks" % "spark-xml_2.11" % "0.4.1"
 
 
 addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
