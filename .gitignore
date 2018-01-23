@@ -18,3 +18,6 @@ target/
 # Project specific
 .ensime_cache/
 output/
+outputSF/
+outputCache/kanjiCache
+outputCache/vocabCache

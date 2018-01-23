@@ -16,6 +16,8 @@ import scala.collection.mutable
 import com.databricks.spark.xml._
 import org.apache.commons.lang3.StringUtils
 
+import scala.util.{Failure, Success, Try}
+
 
 //import bayio.kpe._
 //import bayio.utils.Config
@@ -75,18 +77,20 @@ object Hello {
     //val logFile = "/opt/spark-2.1.0-bin-hadoop2.7/README.md" // Should be some file on your system
     //val conf = new SparkConf().setMaster("local[*]").setAppName("Simple Application")
 
-    def getFld(r: Row, name: String) = r.getString(r.fieldIndex(name))
+    def read(path: String): Try[DataFrame] = Try(spark.read.parquet(path))
 
     def filterWord(r: Row): String = getFld(r, "word")
-
+    def getFld(r: Row, name: String) = r.getString(r.fieldIndex(name))
+    def parseAll = {
     //--- Kanji Frequency ---
-    val toDbl = udf[Double, String](_.toDouble)
+        val toDbl = udf[Double, String](_.toDouble)
 
-    val parseEdict = udf { (r: String) =>
-      val parts = r.split('/').map(_.trim)
-      val word = parts.head.split('[').head.trim
-      word
-    }
+        val parseEdict = udf { (r: String) =>
+         val parts = r.split('/').map(_.trim)
+         val word = parts.head.split('[').head.trim
+         word
+        }
+
     val parseEdictTs = udf { (r: String) =>
       val parts = r.split('/').map(_.trim)
       val translations = parts.tail.filterNot(s => s == null || s.isEmpty).map { s =>
@@ -159,7 +163,8 @@ object Hello {
     val kanjidic = spark.read.json(ScalaConfig.kanjidicPath) //cannot resolve 'UDF(meanings)' due to data type mismatch: argument 1 requires string type, however, '`meanings`' is of array<struct<m_lang:string,meaning:string>> type.;;
       .withColumnRenamed("jlpt", "kdJlpt")
       .withColumnRenamed("meanings", "kdMeanings")
-      .withColumnRenamed("readings", "kdReadings").cache()
+      .withColumnRenamed("readings", "kdReadings")
+      .withColumnRenamed("freq", "kdFreq").cache()
 
     kanjidic.show(7) //reading:ア, r_type:ja_on r_type:ja_kun
     println("Number of kanjidic: " + kanjidic.count()) //expensive
@@ -263,7 +268,9 @@ object Hello {
     //val kanjiVG = spark.read.json(ScalaConfig.KanjiVGDP) //returns empty
 
     def parseKunToArray(k: String): Array[String] = if (k != null && k.trim != "") k.split("、") else Array[String]()
+
     def parseOnToArray(o: String): Array[String] = if (o != null && o.trim != "") o.split("、") else Array[String]()
+
     def parseKDToArray(rs: Seq[Row]) = rs.flatMap {
       case Row(x: String, y: String) if (x == "ja_on" || x == "ja_kun" && y != "") => (Some(y.toHiragana().split("。").head)) // .replace("-", "") //ignores endings & positions in kanjidic
       case _ => None
@@ -361,6 +368,7 @@ object Hello {
       .drop(col("kaOnYomi"))
       .drop('readings)
       .drop('k)
+      .drop('kdFreq)
     //.orderBy(col("jlpt")) //can't resolve
     jointDF.show(23)
 
@@ -379,35 +387,52 @@ object Hello {
     //PROBLEM after flatmaping jcommas
     val uMkStr = udf((a: Seq[String]) => a.mkString(","))
 
+    //Describes schemas (expensive?)
+    kanjis.cache().printSchema()
+    vocabulary.cache().printSchema()
+
+    //Writes to File
+    //Writes Readings
+    readingsDF.select('readingsKanji, uMkStr('readings) as "readings").coalesce(1).write.mode(SaveMode.Overwrite).csv("outputSF") //readings.csv
+
+    (vocabulary, kanjis)
+  }
+
+    //Parse the thing
+    println(ScalaConfig.vocabCacheFN)
+    println(ScalaConfig.kanjiCacheFN)
+    val (vocabulary:DataFrame, kanjis:DataFrame) = (read(ScalaConfig.vocabCacheFN), read(ScalaConfig.kanjiCacheFN)) match {
+      case (Success(vocab), Success(kanjis)) => (vocab, kanjis)
+      case _ => parseAll
+    }
+
+    kanjis.show(50)
+    vocabulary.show(50)
+
     //Joinning vocabs with kanji
     def containsKanjiFilter(r: Row): Boolean = filterWord(r).containsKanji
     val uExtractKanjiFromVocab = udf((word:String) => word.extractUniqueKanji.map(_.toString).toSeq)
 
     println("joining vocabs with kanji")
-    val vocabularyWK: Dataset[Row] = vocabulary.filter(r => containsKanjiFilter(r))//.filter(r => containsJoyoKFilter(r)) //not worth
+    val vocabularyWK: Dataset[Row] = vocabulary.filter(r => containsKanjiFilter(r)) //.filter(r => containsJoyoKFilter(r)) //not worth
       .withColumn("vocabKanji", uExtractKanjiFromVocab('word))
       .select('word, explode('vocabKanji) as "vocabK")
     val jointVK = vocabularyWK
       .join(kanjis, kanjis("kanji") === vocabularyWK("vocabK"))
-      //.groupBy('word)
-      //.agg(collect_list() as "kanjisPerVoc")
+    //.groupBy('word)
+    //.agg(collect_list() as "kanjisPerVoc")
+    //jointVK.show(300)
 
-    jointVK.show(300)
-
-    //Describes schemas (expensive?)
-    kanjis.printSchema()
-    vocabulary.printSchema()
-
-    //Writes to File
-    //Writes Readings
-    readingsDF.select('readingsKanji, uMkStr('readings) as "readings").coalesce(1).write.mode(SaveMode.Overwrite).csv("outputSF") //readings.csv
+    /* Commented for dealing with cache
     //Writes Kanji (multiple files)
     kanjis.write.mode(SaveMode.Overwrite).json("output")
     //Writes Kanji (single file)
     kanjis.coalesce(1).write.mode(SaveMode.Overwrite).json("outputSF")
+    kanjis.coalesce(1).write.mode(SaveMode.Overwrite).parquet(ScalaConfig.kanjiCache)
     //Writes vocabulary (potencially huge, must check)
     //vocabulary.coalesce(1).write.mode(SaveMode.Overwrite).json("vocab")
-
+    vocabulary.coalesce(1).write.mode(SaveMode.Overwrite).parquet(ScalaConfig.vocabCache)
+*/
     spark.stop
   }
 }
@@ -419,6 +444,13 @@ object ScalaConfig {
   //ALERT __________------- ---  JSON MUST BE IN COMPACT FORMAT FOR SPARK TO READ
   private val standardPath = "./utils/"
   private val oldPath = "/run/media/dsalvio/Media/Development/Projects/Java/Full-Out/KPE/Java/"
+
+  val outputCache = "./outputCache/"
+  val kanjiCache = outputCache + "kanjiCache"
+  val vocabCache = outputCache + "vocabCache"
+
+  val vocabCacheFN = vocabCache + "/vocabCached.snappy.parquet"
+  val kanjiCacheFN = kanjiCache + "/kanjiCached.snappy.parquet"
 
   val Edict: String =  standardPath + "edict-utf-8"
   val levelsPath = standardPath + "jlpt-levels.json"
