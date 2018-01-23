@@ -262,43 +262,8 @@ object Hello {
     //val radicals = spark.read.json(ScalaConfig.KanjiAliveRadicalP) //radical isn't properly encoded in file it seems //EN EL ARCHIVO ORIGINAL POR ESO
     //val kanjiVG = spark.read.json(ScalaConfig.KanjiVGDP) //returns empty
 
-    // --- Vocabulary ---
-
-    //val kanjiPerVocab = extractKanjiFromVocabulary(vocabularyWK)//* REVERSE CHANGES AND MAKE USE OF THIS
-    //val kanjiPerVocab = vocabularyWK.withColumn("kanjis", extractKanjiFromVocab(col("word").as[List[String]]))
-    //kanjiPerVocab.show(60)
-
-    //val vocabPerKanji: Array[(String, Array[FrequentWordRawParse])] = lvls.take(50).map(l => (l.kanji -> kanjiPerVocab.filter(kpv => kpv._2.contains(l.kanji.trim.head)).map(e => e._1)))//*
-    //vocabPerKanji.foreach(v => println(col("_1") + ":" + col("_2").toString()))//*
-    /*
-    val ts = kanjiPerVocab.dtypes
-    val filterCA = udf((k:String, c: mutable.WrappedArray[String]) => (c.contains(k)):Boolean)
-
-    val listContainsK = udf((k:String, c: mutable.WrappedArray[String]) => (c.contains(k)):Boolean)
-
-    //val findVocabForKanji = udf((kanji:String) => kanjiPerVocab.where(array_contains(col("kanjis"), kanji)).collect().map)// r => filterCA(kanji, col("kanjis")))) // .getAs[List[String]]("kanjis").contains(kanji))
-
-    val vocabPerKanji = lvlsRaw.withColumn("vocabulary", findVocabForKanji(col("kanji")))
-    //println(kanjiPerVocab.count())
-    val vocabPerKanji = kanjiPerVocab.joinWith(lvlsRaw, listContainsK(lvlsRaw("kanji"), kanjiPerVocab("kanjis"))).orderBy(col("_2")) //array_contains(kanjiPerVocab("kanjis"), lvlsRaw("kanji")))
-    //vocabPerKanji.groupBy(col("_2"))
-    vocabPerKanji.show(16)
-    println(vocabPerKanji.count())
-  */
-
-    //val vocabSpark = spark.sparkContext.parallelize(vocabPerKanji).toDS()
-    //val ts = vocabSpark.dtypes
-    //val vocabPerKanji:Array[(Char, Array[FrequentWordRawParse])] = extractVocabularyForKanji(kanjiPerVocab)
-    //vocabPerKanji.foreach(v => println(v._1 + ":" + v._2.map(_.word).mkString(",")))
-    //vocabPerKanji.foreach(v => println(col("kanji") + ":" + col("vocabulary").toString()))
-
-    //val vocabSpark = spark.createDataset(vocabPerKanji)//*
-    //val vocabSpark = vocabPerKanji
-
     def parseKunToArray(k: String): Array[String] = if (k != null && k.trim != "") k.split("、") else Array[String]()
-
     def parseOnToArray(o: String): Array[String] = if (o != null && o.trim != "") o.split("、") else Array[String]()
-
     def parseKDToArray(rs: Seq[Row]) = rs.flatMap {
       case Row(x: String, y: String) if (x == "ja_on" || x == "ja_kun" && y != "") => (Some(y.toHiragana().split("。").head)) // .replace("-", "") //ignores endings & positions in kanjidic
       case _ => None
