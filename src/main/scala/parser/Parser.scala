@@ -32,8 +32,8 @@ import org.apache.spark.sql.Column
 import org.apache.log4j.{Level, Logger}
 
 
-//Join Vocabs + Kanji and vice-versa
-//Export to Elasticsearch
+//TODO: Join Vocabs + Kanji and vice-versa
+//TODO: Export to Elasticsearch
 
 //TODO: Fix Kun/onYomi shit
 
@@ -239,11 +239,7 @@ object Hello {
       .join(edict, edict("edictWord") === rawVocabulary("word"), "left").drop('edictWord) //maybe join on baseforms if not found?
       .orderBy('rank)
       .cache()
-    vocabulary.show(300)
-
-    /* Does this even Work */
-    //val kanjiReadings = vocabulary.select('word, 'totalOcurrences, explode('furigana) as "furigana")
-    //kanjiReadings.show(300)
+    vocabulary.show(500)
 
     val uExtractKanji = udf((r: Row) => r match {
       case Row(x: String, y: String) => x: String
@@ -258,7 +254,7 @@ object Hello {
       .groupBy('k)
       .agg(collect_list(struct('furigana, 'Occ)) as "readingsWFreq") //if doesn't work remove struct
 
-    kanjiReadings.show(500, false)
+    kanjiReadings.show(31, false)
 
     val tatoes = spark.read.json(ScalaConfig.TatoebaDP)
 
@@ -267,11 +263,6 @@ object Hello {
     //val kanjiVG = spark.read.json(ScalaConfig.KanjiVGDP) //returns empty
 
     // --- Vocabulary ---
-
-
-    def containsKanjiFilter(r: Row): Boolean = filterWord(r).containsKanji
-
-    val vocabularyWK: Dataset[Row] = vocabulary.filter(r => containsKanjiFilter(r)) //.filter(r => containsJoyoKFilter(r)) //not worth
 
     //val kanjiPerVocab = extractKanjiFromVocabulary(vocabularyWK)//* REVERSE CHANGES AND MAKE USE OF THIS
     //val kanjiPerVocab = vocabularyWK.withColumn("kanjis", extractKanjiFromVocab(col("word").as[List[String]]))
@@ -406,16 +397,15 @@ object Hello {
       .drop('readings)
       .drop('k)
     //.orderBy(col("jlpt")) //can't resolve
-
     jointDF.show(23)
 
-    val trimmedDF = jointDF.drop(col("dic_numbers"))
+    val kanjis = jointDF.drop(col("dic_numbers"))
       .drop(col("query_codes"))
       .orderBy(col("rank"))
 
-    trimmedDF.show(50)
+    kanjis.show(50)
 
-    println("TrimmedDF Count: " + trimmedDF.count()) //expensive
+    println("TrimmedDF Count: " + kanjis.count()) //expensive
 
     ///////IMPORTANT:------- UDF MUST NOT THROW ANY INTERNAL EXCEPTIONS; THAT INCLUDES NULL OR THEY WONT WORK---------
     readingsDF.show(20)
@@ -424,20 +414,34 @@ object Hello {
     //PROBLEM after flatmaping jcommas
     val uMkStr = udf((a: Seq[String]) => a.mkString(","))
 
+    //Joinning vocabs with kanji
+    def containsKanjiFilter(r: Row): Boolean = filterWord(r).containsKanji
+    val uExtractKanjiFromVocab = udf((word:String) => word.extractUniqueKanji.map(_.toString).toSeq)
+
+    println("joining vocabs with kanji")
+    val vocabularyWK: Dataset[Row] = vocabulary.filter(r => containsKanjiFilter(r))//.filter(r => containsJoyoKFilter(r)) //not worth
+      .withColumn("vocabKanji", uExtractKanjiFromVocab('word))
+      .select('word, explode('vocabKanji) as "vocabK")
+    val jointVK = vocabularyWK
+      .join(kanjis, kanjis("kanji") === vocabularyWK("vocabK"))
+      //.groupBy('word)
+      //.agg(collect_list() as "kanjisPerVoc")
+
+    jointVK.show(300)
+
     //Describes schemas (expensive?)
-    trimmedDF.printSchema()
+    kanjis.printSchema()
     vocabulary.printSchema()
 
     //Writes to File
     //Writes Readings
     readingsDF.select('readingsKanji, uMkStr('readings) as "readings").coalesce(1).write.mode(SaveMode.Overwrite).csv("outputSF") //readings.csv
     //Writes Kanji (multiple files)
-    trimmedDF.write.mode(SaveMode.Overwrite).json("output")
+    kanjis.write.mode(SaveMode.Overwrite).json("output")
     //Writes Kanji (single file)
-    trimmedDF.coalesce(1).write.mode(SaveMode.Overwrite).json("outputSF")
+    kanjis.coalesce(1).write.mode(SaveMode.Overwrite).json("outputSF")
     //Writes vocabulary (potencially huge, must check)
     //vocabulary.coalesce(1).write.mode(SaveMode.Overwrite).json("vocab")
-
 
     spark.stop
   }
