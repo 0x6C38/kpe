@@ -407,21 +407,38 @@ object Hello {
     }
 
     kanjis.show(50)
+//    kanjis.printSchema()
     vocabulary.show(50)
+//    vocabulary.printSchema()
 
     //Joinning vocabs with kanji
     def containsKanjiFilter(r: Row): Boolean = filterWord(r).containsKanji
     val uExtractKanjiFromVocab = udf((word:String) => word.extractUniqueKanji.map(_.toString).toSeq)
 
+    //Maps to dataset
+//    println("Printing vocabulary DS")
+//    val vocabsds = vocabulary.as[VocabularyDS]
+//    vocabsds.printSchema()
+//    vocabsds.show(50)
+
     println("joining vocabs with kanji")
-    val vocabularyWK: Dataset[Row] = vocabulary.filter(r => containsKanjiFilter(r)) //.filter(r => containsJoyoKFilter(r)) //not worth
+
+    val vocabPerKanji: Dataset[Row] = vocabulary.filter(r => containsKanjiFilter(r)) //.filter(r => containsJoyoKFilter(r)) //not worth
       .withColumn("vocabKanji", uExtractKanjiFromVocab('word))
-      .select('word, explode('vocabKanji) as "vocabK")
-    val jointVK = vocabularyWK
-      .join(kanjis, kanjis("kanji") === vocabularyWK("vocabK"))
-    //.groupBy('word)
-    //.agg(collect_list() as "kanjisPerVoc")
-    //jointVK.show(300)
+      .withColumn("vocabZipped", struct(vocabulary.columns.head, vocabulary.columns.tail: _*))
+      .select('word, explode('vocabKanji) as "vocabK", 'vocabZipped)
+      .groupBy('vocabK)
+      .agg(collect_list('vocabZipped) as "vocabsPerKanji")
+
+    //    vocabularyWK.show(50)
+    vocabPerKanji.show(100)
+
+    val jointVK = kanjis
+      .join(vocabPerKanji, kanjis("kanji") === vocabPerKanji("vocabK"), "left")
+      .drop('vocabK)
+
+    jointVK.show(50)
+
 
     /* Commented for dealing with cache
     //Writes Kanji (multiple files)
