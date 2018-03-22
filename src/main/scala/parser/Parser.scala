@@ -158,7 +158,7 @@ object Hello {
     //val fivecomps = comps.take(50)
 
     val lvlsRaw = spark.read.json(ScalaConfig.levelsPath)
-    val lvls = lvlsRaw.as[KanjiLevel].collect()
+//    val lvls = lvlsRaw.as[KanjiLevel].collect()
 
     val kanjidic = spark.read.json(ScalaConfig.kanjidicPath) //cannot resolve 'UDF(meanings)' due to data type mismatch: argument 1 requires string type, however, '`meanings`' is of array<struct<m_lang:string,meaning:string>> type.;;
       .withColumnRenamed("jlpt", "kdJlpt")
@@ -430,7 +430,6 @@ object Hello {
       .groupBy('vocabK)
       .agg(collect_list('vocabZipped) as "vocabsPerKanji")
 
-    //    vocabularyWK.show(50)
     vocabPerKanji.show(100)
 
     val jointVK = kanjis
@@ -439,6 +438,17 @@ object Hello {
 
     jointVK.show(50)
 
+    val kanjiPerVocab: Dataset[Row] = vocabulary.filter(r => containsKanjiFilter(r))
+      .withColumn("vocabKanji", uExtractKanjiFromVocab('word))
+      .select('*, explode('vocabKanji) as "vocabK")
+      .join(kanjis.withColumn("kanjiZipped", struct(kanjis.columns.head, kanjis.columns.tail: _*)).select('kanji, 'kanjiZipped), 'vocabK === kanjis("kanji"), "left")
+      .drop('vocabKanji)
+      .drop('vocabK)
+      .groupBy('word)
+      .agg(collect_list('kanjiZipped) as "kanjisInVocab")
+    kanjiPerVocab.show(49, false)
+
+    //Now join to vocab with an alias.
 
     /* Commented for dealing with cache
     //Writes Kanji (multiple files)
