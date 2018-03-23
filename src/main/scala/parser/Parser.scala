@@ -446,8 +446,12 @@ object Hello {
       .drop('vocabK)
       .groupBy('word)
       .agg(collect_list('kanjiZipped) as "kanjisInVocab")
+      .withColumnRenamed("word", "wordK")
+
     kanjiPerVocab.show(49, false)
 
+    val jointKV = vocabulary.join(kanjiPerVocab, kanjiPerVocab("wordK") === vocabulary("word")).drop('wordK)
+    jointKV.show(48, false)
     //Now join to vocab with an alias.
 
     /* Commented for dealing with cache
