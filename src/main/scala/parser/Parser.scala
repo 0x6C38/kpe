@@ -49,7 +49,7 @@ import org.apache.log4j.{Level, Logger}
 
 object Hello {
   val conf = new SparkConf().setMaster("local[*]").setAppName("Simple Application")
-  val spark: SparkSession = SparkSession.builder.master("local").getOrCreate
+  implicit val spark: SparkSession = SparkSession.builder.master("local").getOrCreate
 
   import spark.implicits._ //necesary import
 
@@ -82,13 +82,14 @@ object Hello {
     def getFld(r: Row, name: String) = r.getString(r.fieldIndex(name))
     def parseAll = {
     //--- Kanji Frequency ---
-        val toDbl = udf[Double, String](_.toDouble)
+    val toDbl = udf[Double, String](_.toDouble)
 
-        val parseEdict = udf { (r: String) =>
-         val parts = r.split('/').map(_.trim)
-         val word = parts.head.split('[').head.trim
-         word
-        }
+      // EDICT PARSER BEGINING
+      val parseEdict = udf { (r: String) =>
+        val parts = r.split('/').map(_.trim)
+        val word = parts.head.split('[').head.trim
+        word
+      }
 
     val parseEdictTs = udf { (r: String) =>
       val parts = r.split('/').map(_.trim)
@@ -108,6 +109,8 @@ object Hello {
       .withColumn("translations", parseEdictTs('value))
       .dropDuplicates("edictWord") //should better join the duplicate data together but we
       .drop('value)
+
+      // EDICT PARSER END
 
     edict.show(200, false)
     println(edict.count())
@@ -397,6 +400,10 @@ object Hello {
     (vocabulary, kanjis)
   }
 
+    val edict2 = EdictParser.parseEdict(ScalaConfig.Edict)
+    edict2.show(50)
+    println(edict2.count)
+
     //Parse the thing
     println(ScalaConfig.vocabCacheFN)
     println(ScalaConfig.kanjiCacheFN)
@@ -431,11 +438,11 @@ object Hello {
 
     vocabPerKanji.show(100)
 
-    val jointVK = kanjis
+    val jointKV = kanjis
       .join(vocabPerKanji, kanjis("kanji") === vocabPerKanji("vocabK"), "left")
       .drop('vocabK)
 
-    jointVK.show(50)
+    jointKV.show(50)
 
     val kanjiPerVocab: Dataset[Row] = vocabulary.filter(r => containsKanjiFilter(r))
       .withColumn("vocabKanji", uExtractKanjiFromVocab('word))
@@ -449,8 +456,8 @@ object Hello {
 
     kanjiPerVocab.show(49, false)
 
-    val jointKV = vocabulary.join(kanjiPerVocab, kanjiPerVocab("wordK") === vocabulary("word")).drop('wordK)
-    jointKV.show(48, false)
+    val jointVK = vocabulary.join(kanjiPerVocab, kanjiPerVocab("wordK") === vocabulary("word")).drop('wordK)
+    jointVK.show(48, false)
     //Now join to vocab with an alias.
 
     /* Commented for dealing with cache
