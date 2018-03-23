@@ -34,7 +34,6 @@ import org.apache.spark.sql.Column
 import org.apache.log4j.{Level, Logger}
 
 
-//TODO: Join Vocabs + Kanji and vice-versa
 //TODO: Export to Elasticsearch
 
 //TODO: Fix Kun/onYomi shit
