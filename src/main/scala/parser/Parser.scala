@@ -83,9 +83,7 @@ object Hello {
       //    val edict = EdictParser.parseEdict(ScalaConfig.Edict)
       val edict = LocalCache.of(ScalaConfig.Edict, EdictParser.parseEdict(ScalaConfig.Edict), true)
       edict.show(50)
-
-    edict.show(200, false)
-    println(edict.count())
+      println(edict.count())
 
 //    val translationsDictionary = spark.read.json(ScalaConfig.JmDicP) //incorrect formatting //Should eventually use instead of EDICT
 
@@ -116,10 +114,6 @@ object Hello {
       .withColumnRenamed("_c0", "fKanji").withColumnRenamed("_c1", "ffragments")
       .withColumn("fKanji", trim(col("fKanji"))).withColumn("ffragments", trim(col("ffragments"))) //must trim to match
 
-
-    def parseSimpleEnglish(s: String): Seq[(String, String)] = if (s != null) s.trim.split(", ").map(t => ("en", t)) else Seq[(String, String)]()
-
-    val toTranslationArray = udf((s: String) => parseSimpleEnglish(s))
     val kanjiAlive = spark.read.json(ScalaConfig.KanjiAliveP).withColumnRenamed("kanji", "kaKanji")
       .withColumnRenamed("kmeaning", "kaMeanings")
       .withColumnRenamed("onyomi", "kaOnYomi")
@@ -137,8 +131,11 @@ object Hello {
       .withColumnRenamed("Onyomi", "tanosOnyomi")
       .withColumnRenamed("English", "tanosMeaning")
 
-
     tanosKanji.show(9)
+
+      def parseSimpleEnglish(s: String): Seq[(String, String)] = if (s != null) s.trim.split(", ").map(t => ("en", t)) else Seq[(String, String)]()
+
+      val toTranslationArray = udf((s: String) => parseSimpleEnglish(s))
 
     def combineAllMeanings(meanings: Seq[Row], tanosMeaning: Seq[(String, String)], kaMeanings: Seq[(String, String)]): Seq[(String, String)] = {
       val ms = if (meanings != null) meanings.map { case Row(x: String, y: String) => (x, y); case _ => ("", "") } else Seq[(String, String)]()
