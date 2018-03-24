@@ -84,7 +84,7 @@ object Hello {
     //--- Kanji Frequency ---
     val toDbl = udf[Double, String](_.toDouble)
 
-      // EDICT PARSER BEGINING
+      // EDICT PARSER START
       val parseEdict = udf { (r: String) =>
         val parts = r.split('/').map(_.trim)
         val word = parts.head.split('[').head.trim
@@ -117,12 +117,13 @@ object Hello {
 
     val translationsDictionary = spark.read.json(ScalaConfig.JmDicP) //incorrect formatting //Should eventually use instead of EDICT
 
+
+      // FREQS PARSER START
     val aofreqs = spark.read.option("inferSchema", "true").csv(ScalaConfig.aoFreq)
       .withColumnRenamed("_c0", "freqKanji")
       .withColumnRenamed("_c1", "aoOcu")
       .withColumnRenamed("_c2", "aoFreq")
       .withColumn("aoRank", dense_rank().over(Window.orderBy(col("aoOcu").desc)))
-
     //aofreqs.show(5)
 
     val twitterFreqs = spark.read.option("inferSchema", "true").csv(ScalaConfig.twitterFreq)
@@ -151,6 +152,7 @@ object Hello {
       .withColumn("avgRank", avgRankings(col("newsRank"), col("wkRank"), col("twRank"), col("aoRank")))
       .withColumn("rank", dense_rank().over(Window.orderBy(col("avgRank").asc)))
     //kanjiFreqs.show(15)
+      // FREQS PARSER END
 
     //--- Kanji Composition ---
     val rawComps = spark.read.textFile(ScalaConfig.CompositionsPath).filter(l => l.startsWith(l.head + ":") && l.head.isKanji)
@@ -400,9 +402,52 @@ object Hello {
     (vocabulary, kanjis)
   }
 
-    val edict2 = EdictParser.parseEdict(ScalaConfig.Edict)
+    //START REFACTORING CODE
+//    val edict2 = EdictParser.parseEdict(ScalaConfig.Edict)
+    val edict2 = LocalCache.of(ScalaConfig.Edict, EdictParser.parseEdict(ScalaConfig.Edict), true)
     edict2.show(50)
     println(edict2.count)
+
+//    val aofreqs = spark.read.option("inferSchema", "true").csv(ScalaConfig.aoFreq)
+//      .withColumnRenamed("_c0", "freqKanji")
+//      .withColumnRenamed("_c1", "aoOcu")
+//      .withColumnRenamed("_c2", "aoFreq")
+//      .withColumn("aoRank", dense_rank().over(Window.orderBy(col("aoOcu").desc)))
+//    //aofreqs.show(5)
+//
+//    val twitterFreqs = spark.read.option("inferSchema", "true").csv(ScalaConfig.twitterFreq)
+//      .withColumnRenamed("_c0", "twKanji")
+//      .withColumnRenamed("_c1", "twOcu")
+//      .withColumnRenamed("_c2", "twFreq")
+//      .withColumn("twRank", dense_rank().over(Window.orderBy(col("twOcu").desc)))
+//
+//    val wikipediaFreqs = spark.read.option("inferSchema", "true").csv(ScalaConfig.wikipediaFreq)
+//      .withColumnRenamed("_c0", "wkKanji")
+//      .withColumnRenamed("_c1", "wkOcu")
+//      .withColumnRenamed("_c2", "wkFreq")
+//      .withColumn("wkRank", dense_rank().over(Window.orderBy(col("wkOcu").desc)))
+//
+//    val newsFreqs = spark.read.option("inferSchema", "true").csv(ScalaConfig.newsFreq)
+//      .withColumnRenamed("_c0", "newsKanji")
+//      .withColumnRenamed("_c1", "newsOcu")
+//      .withColumnRenamed("_c2", "newsFreq")
+//      .withColumn("newsRank", dense_rank().over(Window.orderBy(col("newsOcu").desc)))
+//
+//    val avgRankings = udf((first: String, second: String, third: String, fourth: String) => (first.toInt + second.toInt + third.toInt + fourth.toInt).toDouble / 4)
+//
+//    val kanjiFreqs = aofreqs.join(twitterFreqs, aofreqs("freqKanji") === twitterFreqs("twKanji"))
+//      .join(wikipediaFreqs, aofreqs("freqKanji") === wikipediaFreqs("wkKanji"))
+//      .join(newsFreqs, aofreqs("freqKanji") === newsFreqs("newsKanji"))
+//      .withColumn("avgRank", avgRankings(col("newsRank"), col("wkRank"), col("twRank"), col("aoRank")))
+//      .withColumn("rank", dense_rank().over(Window.orderBy(col("avgRank").asc)))
+//    kanjiFreqs.show(51)
+//    println(kanjiFreqs.count)
+
+    val kanjiFreqs2 = FreqParser.parseAll(ScalaConfig.aoFreq, ScalaConfig.twitterFreq, ScalaConfig.wikipediaFreq, ScalaConfig.newsFreq, ScalaConfig.allFreqs)
+    kanjiFreqs2.show(52)
+    println(kanjiFreqs2.count)
+
+    //END REFACTORING CODE
 
     //Parse the thing
     println(ScalaConfig.vocabCacheFN)
@@ -507,6 +552,8 @@ object ScalaConfig {
   val twitterFreq = standardPath + "twitter.csv"
   val newsFreq = standardPath + "news.csv" //"all",10318554,1
   val wikipediaFreq = standardPath + "wikipedia.csv"
+
+  val allFreqs =  standardPath + "all-freqs"
 
   val KanjiAliveRadicalP = standardPath + "japanese-radicals-compact.json"
   val CompositionsPath = standardPath + "cjk-decomp-0.4.0.txt"
