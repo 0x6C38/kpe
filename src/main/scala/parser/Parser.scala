@@ -94,12 +94,12 @@ object Hello {
     def parseAll = {
       //    val edict = EdictParser.parseEdict(ScalaConfig.Edict)
       val edict = LocalCache.of(ScalaConfig.Edict, EdictParser.parseEdict(ScalaConfig.Edict), true)
-      printInfo(edict, "Edict")
+      printInfo(edict, "Edict")()
 
 //    val translationsDictionary = spark.read.json(ScalaConfig.JmDicP) //incorrect formatting //Should eventually use instead of EDICT
 
       val kanjiFreqs = FreqParser.parseAll(ScalaConfig.aoFreq, ScalaConfig.twitterFreq, ScalaConfig.wikipediaFreq, ScalaConfig.newsFreq, ScalaConfig.allFreqs)
-      printInfo(kanjiFreqs, "Kanji Freqs")
+      printInfo(kanjiFreqs, "Kanji Freqs")()
 
     //--- Kanji Composition ---
     val rawComps = spark.read.textFile(ScalaConfig.CompositionsPath).filter(l => l.startsWith(l.head + ":") && l.head.isKanji)
@@ -111,14 +111,8 @@ object Hello {
     val lvlsRaw = spark.read.json(ScalaConfig.levelsPath)
 //    val lvls = lvlsRaw.as[KanjiLevel].collect()
 
-    val kanjidic = spark.read.json(ScalaConfig.kanjidicPath) //cannot resolve 'UDF(meanings)' due to data type mismatch: argument 1 requires string type, however, '`meanings`' is of array<struct<m_lang:string,meaning:string>> type.;;
-      .withColumnRenamed("jlpt", "kdJlpt")
-      .withColumnRenamed("meanings", "kdMeanings")
-      .withColumnRenamed("readings", "kdReadings")
-      .withColumnRenamed("freq", "kdFreq").cache()
-
-    kanjidic.show(7) //reading:ア, r_type:ja_on r_type:ja_kun
-    println("Number of kanjidic: " + kanjidic.count()) //expensive
+      val kanjidic = KanjidicParser.parseKanjidic(ScalaConfig.kanjidicPath)
+      printInfo(kanjidic, "Kanjidic")(50, true, true)
 
     val allFragmentsLists = spark.read.option("delimiter", ":").format("csv").load(ScalaConfig.KradFN)
       .withColumnRenamed("_c0", "fKanji").withColumnRenamed("_c1", "ffragments")
@@ -347,8 +341,8 @@ object Hello {
   }
 
     //START REFACTORING CODE
-    val edict = LocalCache.of(ScalaConfig.Edict, EdictParser.parseEdict(ScalaConfig.Edict), true)
-    printInfo(edict, "Edict")(50, true, true)
+    val kanjidic = KanjidicParser.parseKanjidic(ScalaConfig.kanjidicPath)
+    printInfo(kanjidic, "Kanjidic")(50, true, true)
     //END REFACTORING CODE
 
     //Parse the thing

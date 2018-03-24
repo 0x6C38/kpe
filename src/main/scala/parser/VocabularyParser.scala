@@ -4,10 +4,15 @@ import models.KanaTransliteration
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{col, dense_rank, udf}
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import sjt._
+import sjt.JapaneseInstances._
+import sjt.JapaneseSyntax._
+
 import parser.Hello.spark
 
 object VocabularyParser {
   def parseVocabulary(path: String, edict: DataFrame)(implicit spark: SparkSession): DataFrame = {
+    import spark.implicits._
     val uBaseForm = udf((word: String) => word.tokenize().headOption.map(_.getBaseForm()).getOrElse(""))
     val uFurigana = udf((word: String) => word.furigana().map(f => (f.original, f.kana.hiragana)))
     val uTransliterate = udf((japanese: String) => KanaTransliteration(japanese): KanaTransliteration)
