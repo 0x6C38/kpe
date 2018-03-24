@@ -80,25 +80,18 @@ object Hello {
     def filterWord(r: Row): String = getFld(r, "word")
     def getFld(r: Row, name: String) = r.getString(r.fieldIndex(name))
     def parseAll = {
-    //--- Kanji Frequency ---
-//    val toDbl = udf[Double, String](_.toDouble)
-
-      // EDICT PARSER START
       //    val edict = EdictParser.parseEdict(ScalaConfig.Edict)
       val edict = LocalCache.of(ScalaConfig.Edict, EdictParser.parseEdict(ScalaConfig.Edict), true)
       edict.show(50)
-      // EDICT PARSER END
 
     edict.show(200, false)
     println(edict.count())
 
 //    val translationsDictionary = spark.read.json(ScalaConfig.JmDicP) //incorrect formatting //Should eventually use instead of EDICT
 
-      // FREQS PARSER START
       val kanjiFreqs = FreqParser.parseAll(ScalaConfig.aoFreq, ScalaConfig.twitterFreq, ScalaConfig.wikipediaFreq, ScalaConfig.newsFreq, ScalaConfig.allFreqs)
       kanjiFreqs.show(52)
       println(kanjiFreqs.count)
-      // FREQS PARSER END
 
     //--- Kanji Composition ---
     val rawComps = spark.read.textFile(ScalaConfig.CompositionsPath).filter(l => l.startsWith(l.head + ":") && l.head.isKanji)
@@ -133,7 +126,6 @@ object Hello {
       .withColumnRenamed("kunyomi", "kaKunYomi")
       .withColumnRenamed("onyomi_ja", "kaOnYomi_ja")
       .withColumnRenamed("kunyomi_ja", "kaKunYomi_ja")
-
 
     kanjiAlive.show(8)
     println("Number of kanjiAlive: " + kanjiAlive.count()) //expensive
