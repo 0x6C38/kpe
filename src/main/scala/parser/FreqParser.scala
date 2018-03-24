@@ -4,7 +4,17 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions.udf
+import org.apache.spark.SparkContext
+import org.apache.spark.SparkContext._
+import org.apache.spark.SparkConf
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql._
+import org.apache.spark.sql.expressions.Window
+import com.atilika.kuromoji.ipadic.Tokenizer
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import parser.Hello.spark
+
+import org.apache.spark.sql.functions._
 
 object FreqParser {
   def parseAOFreqs(path: String): DataFrame = {
@@ -40,7 +50,7 @@ object FreqParser {
   }
 
   def parseAll(aoPath: String, twitterPath: String, wikiPath: String, newsPath: String, path: String): DataFrame = {
-//    ScalaConfig.aoFreq, ScalaConfig.twitterFreq, ScalaConfig.wikipediaFreq, ScalaConfig.newsFreq, ScalaConfig.allFreqs
+    //    ScalaConfig.aoFreq, ScalaConfig.twitterFreq, ScalaConfig.wikipediaFreq, ScalaConfig.newsFreq, ScalaConfig.allFreqs
     val aofreqs = parseAOFreqs(aoPath)
 
     val twitterFreqs = parseTwitterFreqs(twitterPath)
