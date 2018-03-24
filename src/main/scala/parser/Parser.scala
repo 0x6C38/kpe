@@ -92,7 +92,8 @@ object Hello {
     def filterWord(r: Row): String = getFld(r, "word")
     def getFld(r: Row, name: String) = r.getString(r.fieldIndex(name))
     def parseAll = {
-      //    val edict = EdictParser.parseEdict(ScalaConfig.Edict)
+      val lvlsRaw = spark.read.json(ScalaConfig.levelsPath).cache()
+
       val edict = LocalCache.of(ScalaConfig.Edict, EdictParser.parseEdict(ScalaConfig.Edict), true)
       printInfo(edict, "Edict")()
 
@@ -108,8 +109,6 @@ object Hello {
       .withColumnRenamed("_2", "components")
     //val fivecomps = comps.take(50)
 
-    val lvlsRaw = spark.read.json(ScalaConfig.levelsPath).cache()
-//    val lvls = lvlsRaw.as[KanjiLevel].collect()
 
       val kanjidic = KanjidicParser.parseKanjidic(ScalaConfig.kanjidicPath)
       printInfo(kanjidic, "Kanjidic")()
@@ -121,13 +120,8 @@ object Hello {
       val kanjiAlive = KanjiAliveParser.parseKanjiAlive(ScalaConfig.KanjiAliveP)
       printInfo(kanjiAlive, "KanjiAlive")()
 
-    val tanosKanji = spark.read.json(ScalaConfig.KanjiTanosPFreq).withColumnRenamed("Kanji", "tanosKanji")
-      .withColumnRenamed("jlpt", "tanosJlpt")
-      .withColumnRenamed("Kunyomi", "tanosKunyomi")
-      .withColumnRenamed("Onyomi", "tanosOnyomi")
-      .withColumnRenamed("English", "tanosMeaning")
-
-    tanosKanji.show(9)
+      val tanosKanji = TanosParser.parseTanos(ScalaConfig.KanjiTanosPFreq)
+      printInfo(tanosKanji, "Tanos Kanji")()
 
       def parseSimpleEnglish(s: String): Seq[(String, String)] = if (s != null) s.trim.split(", ").map(t => ("en", t)) else Seq[(String, String)]()
 
@@ -333,8 +327,7 @@ object Hello {
   }
 
     //START REFACTORING CODE
-    val kanjiAlive2 = KanjiAliveParser.parseKanjiAlive(ScalaConfig.KanjiAliveP)
-    printInfo(kanjiAlive2, "KanjiAlive")(50, true, true)
+
     //END REFACTORING CODE
 
     //Parse the thing
