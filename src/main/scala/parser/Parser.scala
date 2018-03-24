@@ -108,26 +108,18 @@ object Hello {
       .withColumnRenamed("_2", "components")
     //val fivecomps = comps.take(50)
 
-    val lvlsRaw = spark.read.json(ScalaConfig.levelsPath)
+    val lvlsRaw = spark.read.json(ScalaConfig.levelsPath).cache()
 //    val lvls = lvlsRaw.as[KanjiLevel].collect()
 
       val kanjidic = KanjidicParser.parseKanjidic(ScalaConfig.kanjidicPath)
-      printInfo(kanjidic, "Kanjidic")(50, true, true)
+      printInfo(kanjidic, "Kanjidic")()
 
-    val allFragmentsLists = spark.read.option("delimiter", ":").format("csv").load(ScalaConfig.KradFN)
-      .withColumnRenamed("_c0", "fKanji").withColumnRenamed("_c1", "ffragments")
-      .withColumn("fKanji", trim(col("fKanji"))).withColumn("ffragments", trim(col("ffragments"))) //must trim to match
+      val allFragmentsLists = spark.read.option("delimiter", ":").format("csv").load(ScalaConfig.KradFN)
+        .withColumnRenamed("_c0", "fKanji").withColumnRenamed("_c1", "ffragments")
+        .withColumn("fKanji", trim(col("fKanji"))).withColumn("ffragments", trim(col("ffragments"))) //must trim to match
 
-    val kanjiAlive = spark.read.json(ScalaConfig.KanjiAliveP).withColumnRenamed("kanji", "kaKanji")
-      .withColumnRenamed("kmeaning", "kaMeanings")
-      .withColumnRenamed("onyomi", "kaOnYomi")
-      .withColumnRenamed("kunyomi", "kaKunYomi")
-      .withColumnRenamed("onyomi_ja", "kaOnYomi_ja")
-      .withColumnRenamed("kunyomi_ja", "kaKunYomi_ja")
-
-    kanjiAlive.show(8)
-    println("Number of kanjiAlive: " + kanjiAlive.count()) //expensive
-
+      val kanjiAlive = KanjiAliveParser.parseKanjiAlive(ScalaConfig.KanjiAliveP)
+      printInfo(kanjiAlive, "KanjiAlive")()
 
     val tanosKanji = spark.read.json(ScalaConfig.KanjiTanosPFreq).withColumnRenamed("Kanji", "tanosKanji")
       .withColumnRenamed("jlpt", "tanosJlpt")
@@ -341,8 +333,8 @@ object Hello {
   }
 
     //START REFACTORING CODE
-    val kanjidic = KanjidicParser.parseKanjidic(ScalaConfig.kanjidicPath)
-    printInfo(kanjidic, "Kanjidic")(50, true, true)
+    val kanjiAlive2 = KanjiAliveParser.parseKanjiAlive(ScalaConfig.KanjiAliveP)
+    printInfo(kanjiAlive2, "KanjiAlive")(50, true, true)
     //END REFACTORING CODE
 
     //Parse the thing
