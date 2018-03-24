@@ -35,7 +35,6 @@ import org.apache.log4j.{Level, Logger}
 
 
 //TODO: Export to Elasticsearch
-
 //TODO: Fix Kun/onYomi shit
 
 //TODO: Add resource files to build
@@ -92,6 +91,7 @@ object Hello {
     def filterWord(r: Row): String = getFld(r, "word")
     def getFld(r: Row, name: String) = r.getString(r.fieldIndex(name))
     def parseAll = {
+      val wikiRadicals = spark.read.json(ScalaConfig.WikiRadsDP)
       val lvlsRaw = spark.read.json(ScalaConfig.levelsPath).cache()
 
       val edict = LocalCache.of(ScalaConfig.Edict, EdictParser.parseEdict(ScalaConfig.Edict), true)
@@ -107,8 +107,6 @@ object Hello {
     val comps = rawComps.map(l => l.head.toString -> Composition.parseKCompLine(l))
       .withColumnRenamed("_1", "cKanji")
       .withColumnRenamed("_2", "components")
-    //val fivecomps = comps.take(50)
-
 
       val kanjidic = KanjidicParser.parseKanjidic(ScalaConfig.kanjidicPath)
       printInfo(kanjidic, "Kanjidic")()
@@ -123,10 +121,7 @@ object Hello {
       val tanosKanji = TanosParser.parseTanos(ScalaConfig.KanjiTanosPFreq)
       printInfo(tanosKanji, "Tanos Kanji")()
 
-      def parseSimpleEnglish(s: String): Seq[(String, String)] = if (s != null) s.trim.split(", ").map(t => ("en", t)) else Seq[(String, String)]()
-
-      val toTranslationArray = udf((s: String) => parseSimpleEnglish(s))
-
+// START OF COMBINER
     def combineAllMeanings(meanings: Seq[Row], tanosMeaning: Seq[(String, String)], kaMeanings: Seq[(String, String)]): Seq[(String, String)] = {
       val ms = if (meanings != null) meanings.map { case Row(x: String, y: String) => (x, y); case _ => ("", "") } else Seq[(String, String)]()
       val tns = if (tanosMeaning != null) tanosMeaning else Seq[(String, String)]()
@@ -136,43 +131,26 @@ object Hello {
 
     val toCombinedMeaningsSet = udf((meanings: Seq[Row], tanosMeaning: Seq[(String, String)], kaMeanings: Seq[(String, String)]) => combineAllMeanings(meanings, tanosMeaning, kaMeanings))
 
-    //println("kd meanings count: " + kanjidic.filter(r => getFld(r, "kdMeanings") != "").count)
-    val combinedMeanings = kanjidic
-      .join(kanjiAlive, kanjidic("literal") === kanjiAlive("kaKanji"), "fullouter")
-      .join(tanosKanji, kanjidic("literal") === tanosKanji("tanosKanji"), "fullouter")
-      .withColumn("meanings", toCombinedMeaningsSet('kdMeanings, toTranslationArray('tanosMeaning), toTranslationArray('kaMeanings)))
-      .select('literal, 'meanings)
-      .withColumnRenamed("literal", "cmLiteral")
-      .alias("combinedMeanings")
-    combinedMeanings.show(9)
+      def parseSimpleEnglish(s: String): Seq[(String, String)] = if (s != null) s.trim.split(", ").map(t => ("en", t)) else Seq[(String, String)]()
+      val toTranslationArray = udf((s: String) => parseSimpleEnglish(s))
+      //println("kd meanings count: " + kanjidic.filter(r => getFld(r, "kdMeanings") != "").count)
+      val combinedMeanings = kanjidic
+        .join(kanjiAlive, kanjidic("literal") === kanjiAlive("kaKanji"), "fullouter")
+        .join(tanosKanji, kanjidic("literal") === tanosKanji("tanosKanji"), "fullouter")
+        .withColumn("meanings", toCombinedMeaningsSet('kdMeanings, toTranslationArray('tanosMeaning), toTranslationArray('kaMeanings)))
+        .select('literal, 'meanings)
+        .withColumnRenamed("literal", "cmLiteral")
+        .alias("combinedMeanings")
+      combinedMeanings.show(9)
+      // End OF COMBINER
 
-
-    val wikiRadicals = spark.read.json(ScalaConfig.WikiRadsDP)
-
-    val tokenizerCache = new Tokenizer()
     println("Now calculating vocabulary and whatnot")
     //def doTransliteration(japanese: String):KanaTransliteration = KanaTransliteration(japanese,japanese.toHiragana(tokenizerCache), japanese.toKatakana(tokenizerCache),japanese.toRomaji(tokenizerCache))
 
-    val uBaseForm = udf((word: String) => word.tokenize().headOption.map(_.getBaseForm()).getOrElse(""))
-    val uFurigana = udf((word: String) => word.furigana().map(f => (f.original, f.kana.hiragana)))
-    val uTransliterate = udf((japanese: String) => KanaTransliteration(japanese): KanaTransliteration)
-    val uTransliterateA = udf((js: Seq[String]) => js.map(japanese => KanaTransliteration(japanese): KanaTransliteration))
-    val uSum3 = udf((a: Int, b: Int, c: Int) => a + b + c)
-
-    val rawVocabulary = spark.read.json(ScalaConfig.FrequentWordsP)
-    val vocabulary = rawVocabulary
-      .withColumn("internetRank", dense_rank().over(Window.orderBy(col("internetRelative").desc)))
-      .withColumn("novelsRank", dense_rank().over(Window.orderBy(col("novelRelative").desc)))
-      .withColumn("subtitlesRank", dense_rank().over(Window.orderBy(col("subtitlesRelative").desc)))
-      .withColumn("rank", dense_rank().over(Window.orderBy(col("averageRelative").desc)))
-      .withColumn("transliterations", (uTransliterate(col("word"))))
-      .withColumn("furigana", (uFurigana('word)))
-      .withColumn("totalOcurrences", uSum3('internetOcurrences, 'novelOcurrences, 'subtitlesOcurrences))
-      .withColumn("baseForm", uBaseForm('word)) //maybe collapse on to base form?
-      .join(edict, edict("edictWord") === rawVocabulary("word"), "left").drop('edictWord) //maybe join on baseforms if not found?
-      .orderBy('rank)
-      .cache()
-    vocabulary.show(500)
+      //Start of vocabulary
+      val vocabulary = VocabularyParser.parseVocabulary(ScalaConfig.FrequentWordsP, edict).cache()
+      printInfo(vocabulary, "Vocabulary")(500)
+      //End of vocabulary
 
     val uExtractKanji = udf((r: Row) => r match {
       case Row(x: String, y: String) => x: String
@@ -327,7 +305,8 @@ object Hello {
   }
 
     //START REFACTORING CODE
-
+    val vocabulary2 = VocabularyParser.parseVocabulary(ScalaConfig.FrequentWordsP, edict)
+    printInfo(vocabulary2, "Vocabulary 2")(50, true, true)
     //END REFACTORING CODE
 
     //Parse the thing
@@ -402,9 +381,7 @@ object Hello {
 
 
 object ScalaConfig {
-
-
-  //ALERT __________------- ---  JSON MUST BE IN COMPACT FORMAT FOR SPARK TO READ
+  //ALERT!!! JSON MUST BE IN COMPACT FORMAT FOR SPARK TO READ
   private val standardPath = "./utils/"
   private val oldPath = "/run/media/dsalvio/Media/Development/Projects/Java/Full-Out/KPE/Java/"
 
