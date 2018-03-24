@@ -94,14 +94,12 @@ object Hello {
     def parseAll = {
       //    val edict = EdictParser.parseEdict(ScalaConfig.Edict)
       val edict = LocalCache.of(ScalaConfig.Edict, EdictParser.parseEdict(ScalaConfig.Edict), true)
-      edict.show(50)
-      println(edict.count())
+      printInfo(edict, "Edict")
 
 //    val translationsDictionary = spark.read.json(ScalaConfig.JmDicP) //incorrect formatting //Should eventually use instead of EDICT
 
       val kanjiFreqs = FreqParser.parseAll(ScalaConfig.aoFreq, ScalaConfig.twitterFreq, ScalaConfig.wikipediaFreq, ScalaConfig.newsFreq, ScalaConfig.allFreqs)
-      kanjiFreqs.show(52)
-      println(kanjiFreqs.count)
+      printInfo(kanjiFreqs, "Kanji Freqs")
 
     //--- Kanji Composition ---
     val rawComps = spark.read.textFile(ScalaConfig.CompositionsPath).filter(l => l.startsWith(l.head + ":") && l.head.isKanji)
@@ -176,7 +174,6 @@ object Hello {
     //def doTransliteration(japanese: String):KanaTransliteration = KanaTransliteration(japanese,japanese.toHiragana(tokenizerCache), japanese.toKatakana(tokenizerCache),japanese.toRomaji(tokenizerCache))
 
     val uBaseForm = udf((word: String) => word.tokenize().headOption.map(_.getBaseForm()).getOrElse(""))
-
     val uFurigana = udf((word: String) => word.furigana().map(f => (f.original, f.kana.hiragana)))
     val uTransliterate = udf((japanese: String) => KanaTransliteration(japanese): KanaTransliteration)
     val uTransliterateA = udf((js: Seq[String]) => js.map(japanese => KanaTransliteration(japanese): KanaTransliteration))
