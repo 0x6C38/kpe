@@ -81,7 +81,7 @@ object Hello {
     def getFld(r: Row, name: String) = r.getString(r.fieldIndex(name))
     def parseAll = {
     //--- Kanji Frequency ---
-    val toDbl = udf[Double, String](_.toDouble)
+//    val toDbl = udf[Double, String](_.toDouble)
 
       // EDICT PARSER START
       //    val edict = EdictParser.parseEdict(ScalaConfig.Edict)
@@ -92,43 +92,12 @@ object Hello {
     edict.show(200, false)
     println(edict.count())
 
-    val translationsDictionary = spark.read.json(ScalaConfig.JmDicP) //incorrect formatting //Should eventually use instead of EDICT
-
+//    val translationsDictionary = spark.read.json(ScalaConfig.JmDicP) //incorrect formatting //Should eventually use instead of EDICT
 
       // FREQS PARSER START
-    val aofreqs = spark.read.option("inferSchema", "true").csv(ScalaConfig.aoFreq)
-      .withColumnRenamed("_c0", "freqKanji")
-      .withColumnRenamed("_c1", "aoOcu")
-      .withColumnRenamed("_c2", "aoFreq")
-      .withColumn("aoRank", dense_rank().over(Window.orderBy(col("aoOcu").desc)))
-    //aofreqs.show(5)
-
-    val twitterFreqs = spark.read.option("inferSchema", "true").csv(ScalaConfig.twitterFreq)
-      .withColumnRenamed("_c0", "twKanji")
-      .withColumnRenamed("_c1", "twOcu")
-      .withColumnRenamed("_c2", "twFreq")
-      .withColumn("twRank", dense_rank().over(Window.orderBy(col("twOcu").desc)))
-
-    val wikipediaFreqs = spark.read.option("inferSchema", "true").csv(ScalaConfig.wikipediaFreq)
-      .withColumnRenamed("_c0", "wkKanji")
-      .withColumnRenamed("_c1", "wkOcu")
-      .withColumnRenamed("_c2", "wkFreq")
-      .withColumn("wkRank", dense_rank().over(Window.orderBy(col("wkOcu").desc)))
-
-    val newsFreqs = spark.read.option("inferSchema", "true").csv(ScalaConfig.newsFreq)
-      .withColumnRenamed("_c0", "newsKanji")
-      .withColumnRenamed("_c1", "newsOcu")
-      .withColumnRenamed("_c2", "newsFreq")
-      .withColumn("newsRank", dense_rank().over(Window.orderBy(col("newsOcu").desc)))
-
-    val avgRankings = udf((first: String, second: String, third: String, fourth: String) => (first.toInt + second.toInt + third.toInt + fourth.toInt).toDouble / 4)
-
-    val kanjiFreqs = aofreqs.join(twitterFreqs, aofreqs("freqKanji") === twitterFreqs("twKanji"))
-      .join(wikipediaFreqs, aofreqs("freqKanji") === wikipediaFreqs("wkKanji"))
-      .join(newsFreqs, aofreqs("freqKanji") === newsFreqs("newsKanji"))
-      .withColumn("avgRank", avgRankings(col("newsRank"), col("wkRank"), col("twRank"), col("aoRank")))
-      .withColumn("rank", dense_rank().over(Window.orderBy(col("avgRank").asc)))
-    //kanjiFreqs.show(15)
+      val kanjiFreqs = FreqParser.parseAll(ScalaConfig.aoFreq, ScalaConfig.twitterFreq, ScalaConfig.wikipediaFreq, ScalaConfig.newsFreq, ScalaConfig.allFreqs)
+      kanjiFreqs.show(52)
+      println(kanjiFreqs.count)
       // FREQS PARSER END
 
     //--- Kanji Composition ---
@@ -380,11 +349,6 @@ object Hello {
   }
 
     //START REFACTORING CODE
-    // Kanji Freq Refactoring
-    val kanjiFreqs = FreqParser.parseAll(ScalaConfig.aoFreq, ScalaConfig.twitterFreq, ScalaConfig.wikipediaFreq, ScalaConfig.newsFreq, ScalaConfig.allFreqs)
-    kanjiFreqs.show(52)
-    println(kanjiFreqs.count)
-    // End Kanji Freq Refactoring
 
     //END REFACTORING CODE
 
