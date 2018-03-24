@@ -49,7 +49,7 @@ import org.apache.log4j.{Level, Logger}
 
 object Hello {
   val conf = new SparkConf().setMaster("local[*]").setAppName("Simple Application")
-  val spark: SparkSession = SparkSession.builder.master("local").getOrCreate
+  implicit val spark: SparkSession = SparkSession.builder.master("local").getOrCreate
 
   import spark.implicits._ //necesary import
 
@@ -71,6 +71,18 @@ object Hello {
 
   //val avgRankings = udf( (first: String, second: String, third:String, fourth:String) =>  (first.toInt + second.toInt + third.toInt  + fourth.toInt).toDouble / 4 )
   /*def extractVocabularyForKanji(vs:Array[(FrequentWordRawParse, List[Char])]):Array[(Char, Array[FrequentWordRawParse])] = {}*/
+
+  def printInfo(df: DataFrame, name: String = "")(numberToShow: Int = 50, count: Boolean = true, schema: Boolean = false) = {
+    if (count) println(s"$name DF has a total of ${df.count()} rows.")
+    if (numberToShow > 0){
+      println(s"$name DF, first $numberToShow rows:")
+      df.show(numberToShow)
+    }
+    if (schema) {
+      println(s"$name DF Schema:")
+      df.printSchema()
+    }
+  }
 
   def main(args: Array[String]): Unit = {
     //val logFile = "/opt/spark-2.1.0-bin-hadoop2.7/README.md" // Should be some file on your system
@@ -338,7 +350,8 @@ object Hello {
   }
 
     //START REFACTORING CODE
-
+    val edict = LocalCache.of(ScalaConfig.Edict, EdictParser.parseEdict(ScalaConfig.Edict), true)
+    printInfo(edict, "Edict")(50, true, true)
     //END REFACTORING CODE
 
     //Parse the thing
