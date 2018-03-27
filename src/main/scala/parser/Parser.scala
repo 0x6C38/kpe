@@ -1,37 +1,21 @@
 package parser
 
-import java.io.{FileReader, FileWriter, InputStreamReader}
-import java.lang.reflect.Type
-
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql._
-import org.apache.spark.sql.expressions.Window
-import com.atilika.kuromoji.ipadic.Tokenizer
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
-
-import scala.collection.mutable
-import com.databricks.spark.xml._
-import org.apache.commons.lang3.StringUtils
 
 import scala.util.{Failure, Success, Try}
 
-
-//import bayio.kpe._
-//import bayio.utils.Config
-//import kanjivg.KanjiVGPartsParser
 import models.{FrequentWordRawParse, KanjiLevel}
 import models._
 import org.apache.spark._
 import org.apache.spark.sql.functions._
-import sjt._
 import sjt.JapaneseInstances._
 import sjt.JapaneseSyntax._
 import org.apache.spark.sql.functions.{length, trim, when}
 import org.apache.spark.sql.Column
-import org.apache.log4j.{Level, Logger}
 
 
 //TODO: Export to Elasticsearch
@@ -39,9 +23,7 @@ import org.apache.log4j.{Level, Logger}
 
 //TODO: Add resource files to build
 //TODO: Add more info to the vocabs including: rankOfKanjis(?)
-//TODO: Get recursive components for kanjis
-//TODO: Add ranks of components for kanjis
-//TODO: Add ranks of readings for kanjis
+//TODO: Get recursive components for kanjis with their ranks and the ranks of their readings
 //TODO: Fix radical column
 //TODO: Write final vocab to file
 //TODO: Export kanjis
@@ -53,9 +35,7 @@ object Hello {
   import spark.implicits._ //necesary import
 
   //To reduce spark output
-
   import org.apache.log4j.{Level, Logger}
-
   Logger.getLogger("org").setLevel(Level.WARN)
   Logger.getLogger("akka").setLevel(Level.WARN)
 
@@ -286,16 +266,12 @@ object Hello {
 
     println("TrimmedDF Count: " + kanjis.count()) //expensive
 
-    ///////IMPORTANT:------- UDF MUST NOT THROW ANY INTERNAL EXCEPTIONS; THAT INCLUDES NULL OR THEY WONT WORK---------
+    // IMPORTANT !! UDF MUST NOT THROW ANY INTERNAL EXCEPTIONS; THAT INCLUDES NULL OR THEY WONT WORK
     readingsDF.show(20)
     println("Number of readings: " + readingsDF.count()) //expensive
 
     //PROBLEM after flatmaping jcommas
     val uMkStr = udf((a: Seq[String]) => a.mkString(","))
-
-    //Describes schemas (expensive?)
-    kanjis.cache().printSchema()
-    vocabulary.cache().printSchema()
 
     //Writes to File
     //Writes Readings

@@ -39,7 +39,7 @@ libraryDependencies += "org.apache.hadoop" % "hadoop-yarn-common" % "2.8.0"
 libraryDependencies += "org.apache.hadoop" % "hadoop-yarn-client" % "2.8.0"
 
 //XML support
-libraryDependencies += "com.databricks" % "spark-xml_2.11" % "0.4.1"
+//libraryDependencies += "com.databricks" % "spark-xml_2.11" % "0.4.1"
 
 
 addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
