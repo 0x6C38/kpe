@@ -7,7 +7,6 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql._
 
 import scala.util.{Failure, Success, Try}
-
 import models.{FrequentWordRawParse, KanjiLevel}
 import models._
 import org.apache.spark._
@@ -30,8 +29,9 @@ import parser.Config
 //TODO: Export kanjis
 
 object Hello {
-  val conf = new SparkConf().setMaster("local[*]").setAppName("Simple Application")
+  //val logFile = "/opt/spark-2.1.0-bin-hadoop2.7/README.md" // Should be some file on your system
   implicit val spark: SparkSession = SparkSession.builder.master("local").getOrCreate
+  val conf = new SparkConf().setMaster("local[*]").setAppName("Simple Application")
 
   import spark.implicits._ //necesary import
 
@@ -65,8 +65,6 @@ object Hello {
   }
 
   def main(args: Array[String]): Unit = {
-    //val logFile = "/opt/spark-2.1.0-bin-hadoop2.7/README.md" // Should be some file on your system
-    //val conf = new SparkConf().setMaster("local[*]").setAppName("Simple Application")
     def read(path: String): Try[DataFrame] = Try(spark.read.parquet(path))
 
     def filterWord(r: Row): String = getFld(r, "word")
@@ -75,19 +73,18 @@ object Hello {
       val wikiRadicals = spark.read.json(Config.WikiRadsDP)
       val lvlsRaw = spark.read.json(Config.levelsPath).cache()
 
+      //    val translationsDictionary = spark.read.json(ScalaConfig.JmDicP) //incorrect formatting //Should eventually use instead of EDICT
       val edict = LocalCache.of(Config.Edict, EdictParser.parseEdict(Config.Edict), true)
       printInfo(edict, "Edict")()
-
-//    val translationsDictionary = spark.read.json(ScalaConfig.JmDicP) //incorrect formatting //Should eventually use instead of EDICT
 
       val kanjiFreqs = FreqParser.parseAll(Config.aoFreq, Config.twitterFreq, Config.wikipediaFreq, Config.newsFreq, Config.allFreqs)
       printInfo(kanjiFreqs, "Kanji Freqs")()
 
     //--- Kanji Composition ---
     val rawComps = spark.read.textFile(Config.CompositionsPath).filter(l => l.startsWith(l.head + ":") && l.head.isKanji)
-    val comps = rawComps.map(l => l.head.toString -> Composition.parseKCompLine(l))
-      .withColumnRenamed("_1", "cKanji")
-      .withColumnRenamed("_2", "components")
+      val comps = rawComps.map(l => l.head.toString -> Composition.parseKCompLine(l))
+        .withColumnRenamed("_1", "cKanji")
+        .withColumnRenamed("_2", "components")
 
       val kanjidic = KanjidicParser.parseKanjidic(Config.kanjidicPath)
       printInfo(kanjidic, "Kanjidic")()
@@ -129,7 +126,7 @@ object Hello {
     //def doTransliteration(japanese: String):KanaTransliteration = KanaTransliteration(japanese,japanese.toHiragana(tokenizerCache), japanese.toKatakana(tokenizerCache),japanese.toRomaji(tokenizerCache))
 
       //Start of vocabulary
-      val vocabulary = VocabularyParser.parseVocabulary(Config.FrequentWordsP, edict).cache()
+      val vocabulary = LocalCache.of(Config.vocabPath, VocabularyParser.parseVocabulary(Config.FrequentWordsP, edict), true).cache()
       printInfo(vocabulary, "Vocabulary")(500)
       //End of vocabulary
 
@@ -223,9 +220,7 @@ object Hello {
 
     rawJointDF.show(22)
     val jointDF = rawJointDF.drop(col("fragments"))
-      .drop(col("isEUCJP"))
-      .drop(col("isKANGXI"))
-      .drop(col("isKanji"))
+      .drop(col("isEUCJP")).drop(col("isKANGXI")).drop(col("isKanji"))
       .drop(col("literal"))
       .drop(col("processedRadicals"))
       .drop(col("fKanji"))
@@ -249,10 +244,7 @@ object Hello {
       .drop("cmLiteral")
       .drop('readingsKanji) //drops redundant readings columns
       .drop(col("kdReadings"))
-      .drop(col("kaKunYomi_ja"))
-      .drop(col("kaOnYomi_ja"))
-      .drop(col("kaKunYomi"))
-      .drop(col("kaOnYomi"))
+      .drop(col("kaKunYomi_ja")).drop(col("kaOnYomi_ja")).drop(col("kaKunYomi")).drop(col("kaOnYomi"))
       .drop('readings)
       .drop('k)
       .drop('kdFreq)
@@ -341,7 +333,6 @@ object Hello {
 
     val jointVK = vocabulary.join(kanjiPerVocab, kanjiPerVocab("wordK") === vocabulary("word")).drop('wordK)
     jointVK.show(48, false)
-    //Now join to vocab with an alias.
 
     /* Commented for dealing with cache
     //Writes Kanji (multiple files)
