@@ -3,7 +3,7 @@ package parser
 import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions.udf
-import parser.Hello.spark
+import parser.Parser.spark
 
 object EdictParser {
   def parseEdict(path: String)(implicit spark: SparkSession): DataFrame = {

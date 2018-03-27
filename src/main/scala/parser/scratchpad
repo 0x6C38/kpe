@@ -3,7 +3,7 @@ Connected to the target VM, address: '127.0.0.1:43057', transport: 'socket'
 [info] Loading project definition from /media/MD/Development/Projects/Scala/Full-Out/kpe/project
 [info] Set current project to KPE-Spark (in build file:/media/MD/Development/Projects/Scala/Full-Out/kpe/)
 [info] Compiling 1 Scala source to /media/MD/Development/Projects/Scala/Full-Out/kpe/target/scala-2.11/classes...
-[info] Running parser.Hello
+[info] Running parser.Parser
 Using Spark's default log4j profile: org/apache/spark/log4j-defaults.properties
 17/11/21 18:48:53 INFO SparkContext: Running Spark version 2.2.0
 17/11/21 18:48:53 WARN NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java classes where applicable

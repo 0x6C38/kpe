@@ -8,7 +8,7 @@ import sjt._
 import sjt.JapaneseInstances._
 import sjt.JapaneseSyntax._
 
-import parser.Hello.spark
+import parser.Parser.spark
 
 object VocabularyParser {
   def parseVocabulary(path: String, edict: DataFrame)(implicit spark: SparkSession): DataFrame = {

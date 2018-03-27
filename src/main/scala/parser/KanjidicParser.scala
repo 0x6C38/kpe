@@ -1,7 +1,7 @@
 package parser
 
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import parser.Hello.spark
+import parser.Parser.spark
 
 object KanjidicParser {
   def parseKanjidic(path: String)(implicit spark: SparkSession): DataFrame = {

@@ -12,7 +12,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.expressions.Window
 import com.atilika.kuromoji.ipadic.Tokenizer
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
-import parser.Hello.spark
+import parser.Parser.spark
 
 import org.apache.spark.sql.functions._
 
