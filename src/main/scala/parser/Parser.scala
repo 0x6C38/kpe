@@ -16,6 +16,7 @@ import sjt.JapaneseInstances._
 import sjt.JapaneseSyntax._
 import org.apache.spark.sql.functions.{length, trim, when}
 import org.apache.spark.sql.Column
+import parser.Config
 
 
 //TODO: Export to Elasticsearch
@@ -71,34 +72,34 @@ object Hello {
     def filterWord(r: Row): String = getFld(r, "word")
     def getFld(r: Row, name: String) = r.getString(r.fieldIndex(name))
     def parseAll = {
-      val wikiRadicals = spark.read.json(ScalaConfig.WikiRadsDP)
-      val lvlsRaw = spark.read.json(ScalaConfig.levelsPath).cache()
+      val wikiRadicals = spark.read.json(Config.WikiRadsDP)
+      val lvlsRaw = spark.read.json(Config.levelsPath).cache()
 
-      val edict = LocalCache.of(ScalaConfig.Edict, EdictParser.parseEdict(ScalaConfig.Edict), true)
+      val edict = LocalCache.of(Config.Edict, EdictParser.parseEdict(Config.Edict), true)
       printInfo(edict, "Edict")()
 
 //    val translationsDictionary = spark.read.json(ScalaConfig.JmDicP) //incorrect formatting //Should eventually use instead of EDICT
 
-      val kanjiFreqs = FreqParser.parseAll(ScalaConfig.aoFreq, ScalaConfig.twitterFreq, ScalaConfig.wikipediaFreq, ScalaConfig.newsFreq, ScalaConfig.allFreqs)
+      val kanjiFreqs = FreqParser.parseAll(Config.aoFreq, Config.twitterFreq, Config.wikipediaFreq, Config.newsFreq, Config.allFreqs)
       printInfo(kanjiFreqs, "Kanji Freqs")()
 
     //--- Kanji Composition ---
-    val rawComps = spark.read.textFile(ScalaConfig.CompositionsPath).filter(l => l.startsWith(l.head + ":") && l.head.isKanji)
+    val rawComps = spark.read.textFile(Config.CompositionsPath).filter(l => l.startsWith(l.head + ":") && l.head.isKanji)
     val comps = rawComps.map(l => l.head.toString -> Composition.parseKCompLine(l))
       .withColumnRenamed("_1", "cKanji")
       .withColumnRenamed("_2", "components")
 
-      val kanjidic = KanjidicParser.parseKanjidic(ScalaConfig.kanjidicPath)
+      val kanjidic = KanjidicParser.parseKanjidic(Config.kanjidicPath)
       printInfo(kanjidic, "Kanjidic")()
 
-      val allFragmentsLists = spark.read.option("delimiter", ":").format("csv").load(ScalaConfig.KradFN)
+      val allFragmentsLists = spark.read.option("delimiter", ":").format("csv").load(Config.KradFN)
         .withColumnRenamed("_c0", "fKanji").withColumnRenamed("_c1", "ffragments")
         .withColumn("fKanji", trim(col("fKanji"))).withColumn("ffragments", trim(col("ffragments"))) //must trim to match
 
-      val kanjiAlive = KanjiAliveParser.parseKanjiAlive(ScalaConfig.KanjiAliveP)
+      val kanjiAlive = KanjiAliveParser.parseKanjiAlive(Config.KanjiAliveP)
       printInfo(kanjiAlive, "KanjiAlive")()
 
-      val tanosKanji = TanosParser.parseTanos(ScalaConfig.KanjiTanosPFreq)
+      val tanosKanji = TanosParser.parseTanos(Config.KanjiTanosPFreq)
       printInfo(tanosKanji, "Tanos Kanji")()
 
 // START OF COMBINER
@@ -128,7 +129,7 @@ object Hello {
     //def doTransliteration(japanese: String):KanaTransliteration = KanaTransliteration(japanese,japanese.toHiragana(tokenizerCache), japanese.toKatakana(tokenizerCache),japanese.toRomaji(tokenizerCache))
 
       //Start of vocabulary
-      val vocabulary = VocabularyParser.parseVocabulary(ScalaConfig.FrequentWordsP, edict).cache()
+      val vocabulary = VocabularyParser.parseVocabulary(Config.FrequentWordsP, edict).cache()
       printInfo(vocabulary, "Vocabulary")(500)
       //End of vocabulary
 
@@ -147,7 +148,7 @@ object Hello {
 
     kanjiReadings.show(31, false)
 
-    val tatoes = spark.read.json(ScalaConfig.TatoebaDP)
+    val tatoes = spark.read.json(Config.TatoebaDP)
 
     //--- Errors ---
     //val radicals = spark.read.json(ScalaConfig.KanjiAliveRadicalP) //radical isn't properly encoded in file it seems //EN EL ARCHIVO ORIGINAL POR ESO
@@ -281,15 +282,15 @@ object Hello {
   }
 
     //START REFACTORING CODE
-    val edict = LocalCache.of(ScalaConfig.Edict, EdictParser.parseEdict(ScalaConfig.Edict), true)
-    val vocabulary2 = LocalCache.of(ScalaConfig.vocabPath, VocabularyParser.parseVocabulary(ScalaConfig.FrequentWordsP, edict), true)
+    val edict = LocalCache.of(Config.Edict, EdictParser.parseEdict(Config.Edict), true)
+    val vocabulary2 = LocalCache.of(Config.vocabPath, VocabularyParser.parseVocabulary(Config.FrequentWordsP, edict), true)
     printInfo(vocabulary2, "Vocabulary 2")(50, true, true)
     //END REFACTORING CODE
 
     //Parse the thing
-    println(ScalaConfig.vocabCacheFN)
-    println(ScalaConfig.kanjiCacheFN)
-    val (vocabulary:DataFrame, kanjis:DataFrame) = (read(ScalaConfig.vocabCacheFN), read(ScalaConfig.kanjiCacheFN)) match {
+    println(Config.vocabCacheFN)
+    println(Config.kanjiCacheFN)
+    val (vocabulary:DataFrame, kanjis:DataFrame) = (read(Config.vocabCacheFN), read(Config.kanjiCacheFN)) match {
       case (Success(vocab), Success(kanjis)) => (vocab, kanjis)
       case _ => parseAll
     }
@@ -354,44 +355,4 @@ object Hello {
 */
     spark.stop
   }
-}
-
-
-object ScalaConfig {
-  //ALERT!!! JSON MUST BE IN COMPACT FORMAT FOR SPARK TO READ
-  private val standardPath = "./utils/"
-  private val oldPath = "/run/media/dsalvio/Media/Development/Projects/Java/Full-Out/KPE/Java/"
-
-  val vocabPath = standardPath + "vocab"
-
-  val outputCache = "./outputCache/"
-  val kanjiCache = outputCache + "kanjiCache"
-  val vocabCache = outputCache + "vocabCache"
-
-  val vocabCacheFN = vocabCache + "/vocabCached.snappy.parquet"
-  val kanjiCacheFN = kanjiCache + "/kanjiCached.snappy.parquet"
-
-  val Edict: String =  standardPath + "edict-utf-8"
-  val levelsPath = standardPath + "jlpt-levels.json"
-  val kanjidicPath = standardPath + "kanjidic2-compact.json"
-  val KanjiAliveP = standardPath + "ka_data-compact.json"
-  val KanjiTanosPFreq = standardPath + "tanos-jlpt-compact.json"
-
-  val FrequentWordsP = standardPath + "word-frequency-descriptive-compact.json"
-  val WikiRadsDP = standardPath + "japanese-radicals-wikipedia-adapted-compact.json"
-  val TatoebaDP = standardPath + "tatoeba-compact.json"
-  val JmDicP = standardPath + "jmdic-compressed.json" //-compact
-
-  val KanjiVGDP = standardPath + "kanjivg-compact.json"
-  val KradFN = standardPath + "kradfile-u-clean"
-
-  val aoFreq = standardPath + "aozora.csv" //|all|51479326||   1|
-  val twitterFreq = standardPath + "twitter.csv"
-  val newsFreq = standardPath + "news.csv" //"all",10318554,1
-  val wikipediaFreq = standardPath + "wikipedia.csv"
-
-  val allFreqs =  standardPath + "all-freqs"
-
-  val KanjiAliveRadicalP = standardPath + "japanese-radicals-compact.json"
-  val CompositionsPath = standardPath + "cjk-decomp-0.4.0.txt"
 }

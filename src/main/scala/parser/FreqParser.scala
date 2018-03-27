@@ -34,7 +34,7 @@ object FreqParser {
   }
 
   def parseWikipediaFreqs(path: String): DataFrame = {
-    spark.read.option("inferSchema", "true").csv(ScalaConfig.wikipediaFreq)
+    spark.read.option("inferSchema", "true").csv(Config.wikipediaFreq)
       .withColumnRenamed("_c0", "wkKanji")
       .withColumnRenamed("_c1", "wkOcu")
       .withColumnRenamed("_c2", "wkFreq")

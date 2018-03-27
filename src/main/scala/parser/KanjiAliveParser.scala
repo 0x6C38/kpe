@@ -5,7 +5,7 @@ import parser.Hello.spark
 
 object KanjiAliveParser {
   def parseKanjiAlive(path: String)(implicit spark: SparkSession): DataFrame = {
-    spark.read.json(ScalaConfig.KanjiAliveP).withColumnRenamed("kanji", "kaKanji")
+    spark.read.json(Config.KanjiAliveP).withColumnRenamed("kanji", "kaKanji")
       .withColumnRenamed("kmeaning", "kaMeanings")
       .withColumnRenamed("onyomi", "kaOnYomi")
       .withColumnRenamed("kunyomi", "kaKunYomi")
