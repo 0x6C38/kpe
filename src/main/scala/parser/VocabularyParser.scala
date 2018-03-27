@@ -16,7 +16,7 @@ object VocabularyParser {
     val uBaseForm = udf((word: String) => word.tokenize().headOption.map(_.getBaseForm()).getOrElse(""))
     val uFurigana = udf((word: String) => word.furigana().map(f => (f.original, f.kana.hiragana)))
     val uTransliterate = udf((japanese: String) => KanaTransliteration(japanese): KanaTransliteration)
-    val uTransliterateA = udf((js: Seq[String]) => js.map(japanese => KanaTransliteration(japanese): KanaTransliteration))
+
     val uSum3 = udf((a: Int, b: Int, c: Int) => a + b + c)
 
     val rawVocabulary = spark.read.json(path) //ScalaConfig.FrequentWordsP

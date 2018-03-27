@@ -216,6 +216,7 @@ object Hello {
     )
 
     // -- Reading joins --
+    val uTransliterateA = udf((js: Seq[String]) => js.map(japanese => KanaTransliteration(japanese): KanaTransliteration))
     //MUST REMOVE DUPLICATE READINGS
     val readingsDF = lvlsRaw.join(kanjidic, lvlsRaw("kanji") === kanjidic("literal"), "left")
       .join(kanjiAlive, lvlsRaw("kanji") === kanjiAlive("kaKanji"), "left")
@@ -223,7 +224,6 @@ object Hello {
       //.select('kanji as "readingsKanji", mapKDReadings('kdReadings, 'kaKunYomi_ja, 'kaOnYomi_ja) as "readings", uTransliterateA(uMapKDReadingsKun('kdReadings, 'kaKunYomi_ja)) as "kunYomi", uTransliterateA(uMapKDReadingsOn('kdReadings, 'kaOnYomi_ja)) as "onYomi")
       .select('kanji as "readingsKanji", mapKDReadings('kdReadings, 'kaKunYomi_ja, 'kaOnYomi_ja, 'tanosKunyomi, 'tanosOnyomi) as "readings", uTransliterateA(uMapKDReadingsKun('kdReadings, 'kaKunYomi_ja, 'tanosKunyomi)) as "kunYomi", uTransliterateA(uMapKDReadingsOn('kdReadings, 'kaOnYomi_ja, 'tanosOnyomi)) as "onYomi")
     //.select('readingsKanji, 'readings, uTransliterateA('kunYomi) as "kunYomi", uTransliterateA('onYomi) as "onYomi")
-
 
     readingsDF.show(21)
 
@@ -305,7 +305,8 @@ object Hello {
   }
 
     //START REFACTORING CODE
-    val vocabulary2 = VocabularyParser.parseVocabulary(ScalaConfig.FrequentWordsP, edict)
+    val edict = LocalCache.of(ScalaConfig.Edict, EdictParser.parseEdict(ScalaConfig.Edict), true)
+    val vocabulary2 = LocalCache.of(ScalaConfig.vocabPath, VocabularyParser.parseVocabulary(ScalaConfig.FrequentWordsP, edict), true)
     printInfo(vocabulary2, "Vocabulary 2")(50, true, true)
     //END REFACTORING CODE
 
@@ -384,6 +385,8 @@ object ScalaConfig {
   //ALERT!!! JSON MUST BE IN COMPACT FORMAT FOR SPARK TO READ
   private val standardPath = "./utils/"
   private val oldPath = "/run/media/dsalvio/Media/Development/Projects/Java/Full-Out/KPE/Java/"
+
+  val vocabPath = standardPath + "vocab"
 
   val outputCache = "./outputCache/"
   val kanjiCache = outputCache + "kanjiCache"
