@@ -47,7 +47,37 @@ object Parser {
 
   //val avgRankings = udf( (first: String, second: String, third:String, fourth:String) =>  (first.toInt + second.toInt + third.toInt  + fourth.toInt).toDouble / 4 )
   /*def extractVocabularyForKanji(vs:Array[(FrequentWordRawParse, List[Char])]):Array[(Char, Array[FrequentWordRawParse])] = {}*/
+  def extractVocabsForKanji(vocabulary:DataFrame): DataFrame = {
+    def getFld(r: Row, name: String) = r.getString(r.fieldIndex(name))
+    def filterWord(r: Row): String = getFld(r, "word")
 
+    def containsKanjiFilter(r: Row): Boolean = filterWord(r).containsKanji
+    val uExtractKanjiFromVocab = udf((word:String) => word.extractUniqueKanji.map(_.toString).toSeq)
+
+    val vocabPerKanji: Dataset[Row] = vocabulary.filter(r => containsKanjiFilter(r)) //.filter(r => containsJoyoKFilter(r)) //not worth
+      .withColumn("vocabKanji", uExtractKanjiFromVocab('word))
+      .withColumn("vocabZipped", struct(vocabulary.columns.head, vocabulary.columns.tail: _*))
+      .select('word, explode('vocabKanji) as "vocabK", 'vocabZipped)
+      .groupBy('vocabK)
+      .agg(collect_list('vocabZipped) as "vocabsPerKanji")
+    vocabPerKanji
+  }
+  def extractKanjiPerVocab(vocabulary:DataFrame, kanjis:DataFrame):DataFrame = {
+    def getFld(r: Row, name: String) = r.getString(r.fieldIndex(name))
+    def filterWord(r: Row): String = getFld(r, "word")
+    def containsKanjiFilter(r: Row): Boolean = filterWord(r).containsKanji
+
+    val kanjiPerVocab: Dataset[Row] = vocabulary.filter(r => containsKanjiFilter(r))
+      .withColumn("vocabKanji", uExtractKanjiFromVocab('word))
+      .select('*, explode('vocabKanji) as "vocabK")
+      .join(kanjis.withColumn("kanjiZipped", struct(kanjis.columns.head, kanjis.columns.tail: _*)).select('kanji, 'kanjiZipped), 'vocabK === kanjis("kanji"), "left")
+      .drop('vocabKanji)
+      .drop('vocabK)
+      .groupBy('word)
+      .agg(collect_list('kanjiZipped) as "kanjisInVocab")
+      .withColumnRenamed("word", "wordK")
+    kanjiPerVocab
+  }
   def printInfo(df: DataFrame, name: String = "")(numberToShow: Int = 50, count: Boolean = true, schema: Boolean = false) = {
     if (count) println(s"$name DF has a total of ${df.count()} rows.")
     if (numberToShow > 0){
@@ -101,10 +131,8 @@ object Parser {
         .withColumnRenamed("_c0", "fKanji").withColumnRenamed("_c1", "ffragments")
         .withColumn("fKanji", trim(col("fKanji"))).withColumn("ffragments", trim(col("ffragments"))) //must trim to match
 
-      // START OF COMBINER
       val combinedMeanings = LocalCache.of(Config.mCombinedP, MeaningCombiner.combineMeanings(kanjidic, kanjiAlive, tanosKanji), true)
-      printInfo(combinedMeanings, "Meanings")(50, true, true)
-      // End OF COMBINER
+      printInfo(combinedMeanings, "Meanings")()
 
       val vocabulary = LocalCache.of(Config.vocabPath, VocabularyParser.parseVocabulary(Config.FrequentWordsP, edict), true).cache()
       printInfo(vocabulary, "Vocabulary")(500)
@@ -234,37 +262,6 @@ object Parser {
   }
 
     //START REFACTORING CODE
-    val kanjidic = LocalCache.of(Config.kanjidicPath, KanjidicParser.parseKanjidic(Config.kanjidicPath), true)
-    printInfo(kanjidic, "Kanjidic")()
-
-    val kanjiAlive = LocalCache.of(Config.KanjiAliveP,KanjiAliveParser.parseKanjiAlive(Config.KanjiAliveP), true)
-    printInfo(kanjiAlive, "KanjiAlive")()
-
-    val tanosKanji = LocalCache.of(Config.KanjiTanosPFreq, TanosParser.parseTanos(Config.KanjiTanosPFreq), true)
-    printInfo(tanosKanji, "Tanos Kanji")()
-
-    def combineAllMeanings(meanings: Seq[Row], tanosMeaning: Seq[(String, String)], kaMeanings: Seq[(String, String)]): Seq[(String, String)] = {
-      val ms = if (meanings != null) meanings.map { case Row(x: String, y: String) => (x, y); case _ => ("", "") } else Seq[(String, String)]()
-      val tns = if (tanosMeaning != null) tanosMeaning else Seq[(String, String)]()
-      val kans = if (kaMeanings != null) kaMeanings else Seq[(String, String)]() //toSet
-      (ms ++ tns ++ kans).toSet.toSeq
-    }
-
-    val toCombinedMeaningsSet = udf((meanings: Seq[Row], tanosMeaning: Seq[(String, String)], kaMeanings: Seq[(String, String)]) => combineAllMeanings(meanings, tanosMeaning, kaMeanings))
-
-    def parseSimpleEnglish(s: String): Seq[(String, String)] = if (s != null) s.trim.split(", ").map(t => ("en", t)) else Seq[(String, String)]()
-
-    val toTranslationArray = udf((s: String) => parseSimpleEnglish(s))
-    //println("kd meanings count: " + kanjidic.filter(r => getFld(r, "kdMeanings") != "").count)
-    val combinedMeanings = kanjidic
-      .join(kanjiAlive, kanjidic("literal") === kanjiAlive("kaKanji"), "fullouter")
-      .join(tanosKanji, kanjidic("literal") === tanosKanji("tanosKanji"), "fullouter")
-      .withColumn("meanings", toCombinedMeaningsSet('kdMeanings, toTranslationArray('tanosMeaning), toTranslationArray('kaMeanings)))
-      .select('literal, 'meanings)
-      .withColumnRenamed("literal", "cmLiteral")
-      .alias("combinedMeanings")
-    printInfo(combinedMeanings, "Meanings")(50, true, true)
-
 
     //END REFACTORING CODE
 
@@ -281,20 +278,9 @@ object Parser {
 
     println("-- joining vocabs <-> kanji-- ")
 
-    def getFld(r: Row, name: String) = r.getString(r.fieldIndex(name))
-    def filterWord(r: Row): String = getFld(r, "word")
 
-    def containsKanjiFilter(r: Row): Boolean = filterWord(r).containsKanji
-    val uExtractKanjiFromVocab = udf((word:String) => word.extractUniqueKanji.map(_.toString).toSeq)
 
-    val vocabPerKanji: Dataset[Row] = vocabulary.filter(r => containsKanjiFilter(r)) //.filter(r => containsJoyoKFilter(r)) //not worth
-      .withColumn("vocabKanji", uExtractKanjiFromVocab('word))
-      .withColumn("vocabZipped", struct(vocabulary.columns.head, vocabulary.columns.tail: _*))
-      .select('word, explode('vocabKanji) as "vocabK", 'vocabZipped)
-      .groupBy('vocabK)
-      .agg(collect_list('vocabZipped) as "vocabsPerKanji")
-
-    vocabPerKanji.show(100)
+    val vocabPerKanji = extractVocabsForKanji(vocabulary)
 
     val jointKV = kanjis
       .join(vocabPerKanji, kanjis("kanji") === vocabPerKanji("vocabK"), "left")
@@ -302,16 +288,8 @@ object Parser {
 
     jointKV.show(50)
 
-    val kanjiPerVocab: Dataset[Row] = vocabulary.filter(r => containsKanjiFilter(r))
-      .withColumn("vocabKanji", uExtractKanjiFromVocab('word))
-      .select('*, explode('vocabKanji) as "vocabK")
-      .join(kanjis.withColumn("kanjiZipped", struct(kanjis.columns.head, kanjis.columns.tail: _*)).select('kanji, 'kanjiZipped), 'vocabK === kanjis("kanji"), "left")
-      .drop('vocabKanji)
-      .drop('vocabK)
-      .groupBy('word)
-      .agg(collect_list('kanjiZipped) as "kanjisInVocab")
-      .withColumnRenamed("word", "wordK")
 
+    val kanjiPerVocab = extractKanjiPerVocab(vocabulary, kanjis)
     kanjiPerVocab.show(49, false)
 
     val jointVK = vocabulary.join(kanjiPerVocab, kanjiPerVocab("wordK") === vocabulary("word")).drop('wordK)
