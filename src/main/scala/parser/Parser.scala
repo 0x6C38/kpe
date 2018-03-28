@@ -36,23 +36,11 @@ object Parser {
   Logger.getLogger("org").setLevel(Level.WARN)
   Logger.getLogger("akka").setLevel(Level.WARN)
 
-
-  def extractKanjiFromVocabulary(vs: Dataset[Row]): Array[(FrequentWordRawParse, Array[Char])] = {
-    val vParsed: Array[FrequentWordRawParse] = vs.as[FrequentWordRawParse].collect()
-    val kanjiPerVocab: Array[(FrequentWordRawParse, Array[Char])] = vParsed.map((w: FrequentWordRawParse) => (w, w.word.extractKanji.toCharArray))
-    kanjiPerVocab
-  }
-
-  val extractKanjiFromVocab = udf((word: String) => word.extractKanji.map(_.toString))
-
-  //val avgRankings = udf( (first: String, second: String, third:String, fourth:String) =>  (first.toInt + second.toInt + third.toInt  + fourth.toInt).toDouble / 4 )
-  /*def extractVocabularyForKanji(vs:Array[(FrequentWordRawParse, List[Char])]):Array[(Char, Array[FrequentWordRawParse])] = {}*/
-  def extractVocabsForKanji(vocabulary:DataFrame): DataFrame = {
+  def extractVocabsForKanji(vocabulary: DataFrame): DataFrame = {
     def getFld(r: Row, name: String) = r.getString(r.fieldIndex(name))
     def filterWord(r: Row): String = getFld(r, "word")
-
     def containsKanjiFilter(r: Row): Boolean = filterWord(r).containsKanji
-    val uExtractKanjiFromVocab = udf((word:String) => word.extractUniqueKanji.map(_.toString).toSeq)
+    val uExtractKanjiFromVocab = udf((word: String) => word.extractUniqueKanji.map(_.toString).toSeq)
 
     val vocabPerKanji: Dataset[Row] = vocabulary.filter(r => containsKanjiFilter(r)) //.filter(r => containsJoyoKFilter(r)) //not worth
       .withColumn("vocabKanji", uExtractKanjiFromVocab('word))
@@ -62,7 +50,8 @@ object Parser {
       .agg(collect_list('vocabZipped) as "vocabsPerKanji")
     vocabPerKanji
   }
-  def extractKanjiPerVocab(vocabulary:DataFrame, kanjis:DataFrame):DataFrame = {
+
+  def extractKanjiPerVocab(vocabulary: DataFrame, kanjis: DataFrame): DataFrame = {
     def getFld(r: Row, name: String) = r.getString(r.fieldIndex(name))
     def filterWord(r: Row): String = getFld(r, "word")
     def containsKanjiFilter(r: Row): Boolean = filterWord(r).containsKanji
