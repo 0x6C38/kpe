@@ -36,11 +36,12 @@ object Parser {
   Logger.getLogger("org").setLevel(Level.WARN)
   Logger.getLogger("akka").setLevel(Level.WARN)
 
-  def extractVocabsForKanji(vocabulary: DataFrame): DataFrame = {
+  def extractVocabsForKanji(vocabulary:DataFrame): DataFrame = {
     def getFld(r: Row, name: String) = r.getString(r.fieldIndex(name))
     def filterWord(r: Row): String = getFld(r, "word")
+
     def containsKanjiFilter(r: Row): Boolean = filterWord(r).containsKanji
-    val uExtractKanjiFromVocab = udf((word: String) => word.extractUniqueKanji.map(_.toString).toSeq)
+    val uExtractKanjiFromVocab = udf((word:String) => word.extractUniqueKanji.map(_.toString).toSeq)
 
     val vocabPerKanji: Dataset[Row] = vocabulary.filter(r => containsKanjiFilter(r)) //.filter(r => containsJoyoKFilter(r)) //not worth
       .withColumn("vocabKanji", uExtractKanjiFromVocab('word))
@@ -50,11 +51,11 @@ object Parser {
       .agg(collect_list('vocabZipped) as "vocabsPerKanji")
     vocabPerKanji
   }
-
-  def extractKanjiPerVocab(vocabulary: DataFrame, kanjis: DataFrame): DataFrame = {
+  def extractKanjiPerVocab(vocabulary:DataFrame, kanjis:DataFrame):DataFrame = {
     def getFld(r: Row, name: String) = r.getString(r.fieldIndex(name))
     def filterWord(r: Row): String = getFld(r, "word")
     def containsKanjiFilter(r: Row): Boolean = filterWord(r).containsKanji
+    val uExtractKanjiFromVocab = udf((word:String) => word.extractUniqueKanji.map(_.toString).toSeq)
 
     val kanjiPerVocab: Dataset[Row] = vocabulary.filter(r => containsKanjiFilter(r))
       .withColumn("vocabKanji", uExtractKanjiFromVocab('word))
@@ -111,7 +112,7 @@ object Parser {
       val tatoes = spark.read.json(Config.TatoebaDP)
       printInfo(tatoes, "Tatoes Kanji")()
 
-    val rawComps = spark.read.textFile(Config.CompositionsPath).filter(l => l.startsWith(l.head + ":") && l.head.isKanji)
+      val rawComps = spark.read.textFile(Config.CompositionsPath).filter(l => l.startsWith(l.head + ":") && l.head.isKanji)
       val comps = rawComps.map(l => l.head.toString -> Composition.parseKCompLine(l))
         .withColumnRenamed("_1", "cKanji")
         .withColumnRenamed("_2", "components")
@@ -126,28 +127,22 @@ object Parser {
       val vocabulary = LocalCache.of(Config.vocabPath, VocabularyParser.parseVocabulary(Config.FrequentWordsP, edict), true).cache()
       printInfo(vocabulary, "Vocabulary")(500)
 
-    val uExtractKanji = udf((r: Row) => r match {
-      case Row(x: String, y: String) => x: String
-      case _ => ""
-    })
-    val flatten = udf((xs: Seq[Seq[(String, String)]]) => xs.flatten)
-    val kanjiReadings = vocabulary.select('word, 'totalOcurrences, explode('furigana) as "furigana")
-      .groupBy('furigana)
-      .agg(sum('totalOcurrences) as "Occ")
-      .orderBy('furigana)
-      .withColumn("k", uExtractKanji('furigana))
-      .groupBy('k)
-      .agg(collect_list(struct('furigana, 'Occ)) as "readingsWFreq") //if doesn't work remove struct
+      //Readings from words
+      val uExtractKanji = udf((r: Row) => r match {
+        case Row(x: String, y: String) => x: String
+        case _ => ""
+      })
+      val flatten = udf((xs: Seq[Seq[(String, String)]]) => xs.flatten)
+      val kanjiReadings = vocabulary.select('word, 'totalOcurrences, explode('furigana) as "furigana")
+        .groupBy('furigana)
+        .agg(sum('totalOcurrences) as "Occ")
+        .orderBy('furigana)
+        .withColumn("k", uExtractKanji('furigana))
+        .groupBy('k)
+        .agg(collect_list(struct('furigana, 'Occ)) as "readingsWFreq") //if doesn't work remove struct
 
-    kanjiReadings.show(31, false)
-
-    def parseKunToArray(k: String): Array[String] = if (k != null && k.trim != "") k.split("、") else Array[String]()
-    def parseOnToArray(o: String): Array[String] = if (o != null && o.trim != "") o.split("、") else Array[String]()
-
-    def parseKDToArray(rs: Seq[Row]) = rs.flatMap {
-      case Row(x: String, y: String) if (x == "ja_on" || x == "ja_kun" && y != "") => (Some(y.toHiragana().split("。").head)) // .replace("-", "") //ignores endings & positions in kanjidic
-      case _ => None
-    }
+      kanjiReadings.show(31, false)
+      //End Readings from words
 
     def mapKDReadingsKun(rs: Seq[Row], k: String, t: String) = {
       val kuns = if (k != null && k.trim != "") k.split("、") else Array[String]() //.map(_.toHiragana())
@@ -173,7 +168,7 @@ object Parser {
 
     val uMapKDReadingsOn = udf((rs: Seq[Row], k: String, t: String) => mapKDReadingsOn(rs, k, t))
 
-    def cleanUpR(rs: Seq[String]): Seq[String] = rs.map(_.replace("-", "")).toSet.toSeq
+    def cleanUpR(rs: Seq[String]): Seq[String] = rs.map(_.replace("-", "")).distinct
 
     val mapKDReadings = udf((rs: Seq[Row], k: String, y: String, tk: String, to: String) => {
       val kunYomi = mapKDReadingsKun(rs, k, tk)
@@ -267,14 +262,9 @@ object Parser {
 
     println("-- joining vocabs <-> kanji-- ")
 
-
-
     val vocabPerKanji = extractVocabsForKanji(vocabulary)
 
-    val jointKV = kanjis
-      .join(vocabPerKanji, kanjis("kanji") === vocabPerKanji("vocabK"), "left")
-      .drop('vocabK)
-
+    val jointKV = kanjis.join(vocabPerKanji, kanjis("kanji") === vocabPerKanji("vocabK"), "left").drop('vocabK)
     jointKV.show(50)
 
 
