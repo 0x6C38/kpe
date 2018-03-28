@@ -37,4 +37,6 @@ object Config {
 
   val KanjiAliveRadicalP = standardPath + "japanese-radicals-compact.json"
   val CompositionsPath = standardPath + "cjk-decomp-0.4.0.txt"
+
+  val mCombinedP = standardPath + "combined-meanings"
 }

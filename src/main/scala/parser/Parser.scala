@@ -2,19 +2,17 @@ package parser
 
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
-import org.apache.spark.SparkConf
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql._
 
 import scala.util.{Failure, Success, Try}
-import models.{FrequentWordRawParse, KanjiLevel}
-import models._
 import org.apache.spark._
+import org.apache.spark.SparkConf
+import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
-import sjt.JapaneseInstances._
-import sjt.JapaneseSyntax._
 import org.apache.spark.sql.functions.{length, trim, when}
-import org.apache.spark.sql.Column
+
+import models._
+import sjt.JapaneseSyntax._
+import sjt.JapaneseInstances._
 
 //TODO: Export to Elasticsearch
 //TODO: Fix Kun/onYomi shit
@@ -65,8 +63,6 @@ object Parser {
   def main(args: Array[String]): Unit = {
     def read(path: String): Try[DataFrame] = Try(spark.read.parquet(path))
 
-    def filterWord(r: Row): String = getFld(r, "word")
-    def getFld(r: Row, name: String) = r.getString(r.fieldIndex(name))
     def parseAll = {
       //--- Errors ---
       //val radicals = spark.read.json(ScalaConfig.KanjiAliveRadicalP) //radical isn't properly encoded in file it seems //EN EL ARCHIVO ORIGINAL POR ESO
@@ -84,13 +80,13 @@ object Parser {
       val kanjiFreqs = FreqParser.parseAll(Config.aoFreq, Config.twitterFreq, Config.wikipediaFreq, Config.newsFreq, Config.allFreqs)
       printInfo(kanjiFreqs, "Kanji Freqs")()
 
-      val kanjidic = KanjidicParser.parseKanjidic(Config.kanjidicPath)
+      val kanjidic = LocalCache.of(Config.kanjidicPath, KanjidicParser.parseKanjidic(Config.kanjidicPath), true)
       printInfo(kanjidic, "Kanjidic")()
 
-      val kanjiAlive = KanjiAliveParser.parseKanjiAlive(Config.KanjiAliveP)
+      val kanjiAlive = LocalCache.of(Config.KanjiAliveP,KanjiAliveParser.parseKanjiAlive(Config.KanjiAliveP), true)
       printInfo(kanjiAlive, "KanjiAlive")()
 
-      val tanosKanji = TanosParser.parseTanos(Config.KanjiTanosPFreq)
+      val tanosKanji = LocalCache.of(Config.KanjiTanosPFreq, TanosParser.parseTanos(Config.KanjiTanosPFreq), true)
       printInfo(tanosKanji, "Tanos Kanji")()
 
       val tatoes = spark.read.json(Config.TatoebaDP)
@@ -106,27 +102,8 @@ object Parser {
         .withColumn("fKanji", trim(col("fKanji"))).withColumn("ffragments", trim(col("ffragments"))) //must trim to match
 
       // START OF COMBINER
-      def combineAllMeanings(meanings: Seq[Row], tanosMeaning: Seq[(String, String)], kaMeanings: Seq[(String, String)]): Seq[(String, String)] = {
-        val ms = if (meanings != null) meanings.map { case Row(x: String, y: String) => (x, y); case _ => ("", "") } else Seq[(String, String)]()
-        val tns = if (tanosMeaning != null) tanosMeaning else Seq[(String, String)]()
-        val kans = if (kaMeanings != null) kaMeanings else Seq[(String, String)]() //toSet
-        (ms ++ tns ++ kans).toSet.toSeq
-      }
-
-      val toCombinedMeaningsSet = udf((meanings: Seq[Row], tanosMeaning: Seq[(String, String)], kaMeanings: Seq[(String, String)]) => combineAllMeanings(meanings, tanosMeaning, kaMeanings))
-
-      def parseSimpleEnglish(s: String): Seq[(String, String)] = if (s != null) s.trim.split(", ").map(t => ("en", t)) else Seq[(String, String)]()
-
-      val toTranslationArray = udf((s: String) => parseSimpleEnglish(s))
-      //println("kd meanings count: " + kanjidic.filter(r => getFld(r, "kdMeanings") != "").count)
-      val combinedMeanings = kanjidic
-        .join(kanjiAlive, kanjidic("literal") === kanjiAlive("kaKanji"), "fullouter")
-        .join(tanosKanji, kanjidic("literal") === tanosKanji("tanosKanji"), "fullouter")
-        .withColumn("meanings", toCombinedMeaningsSet('kdMeanings, toTranslationArray('tanosMeaning), toTranslationArray('kaMeanings)))
-        .select('literal, 'meanings)
-        .withColumnRenamed("literal", "cmLiteral")
-        .alias("combinedMeanings")
-      combinedMeanings.show(9)
+      val combinedMeanings = LocalCache.of(Config.mCombinedP, MeaningCombiner.combineMeanings(kanjidic, kanjiAlive, tanosKanji), true)
+      printInfo(combinedMeanings, "Meanings")(50, true, true)
       // End OF COMBINER
 
       val vocabulary = LocalCache.of(Config.vocabPath, VocabularyParser.parseVocabulary(Config.FrequentWordsP, edict), true).cache()
@@ -212,8 +189,8 @@ object Parser {
       .join(kanjiReadings, lvlsRaw("kanji") === kanjiReadings("k"))
       .cache
     //.join(vocabSpark, lvlsRaw("kanji") === vocabSpark("_1"),"left") //Correct _1 name //*
-
     rawJointDF.show(22)
+
     val jointDF = rawJointDF.drop(col("fragments"))
       .drop(col("isEUCJP")).drop(col("isKANGXI")).drop(col("isKanji"))
       .drop(col("literal"))
@@ -257,9 +234,38 @@ object Parser {
   }
 
     //START REFACTORING CODE
-    val edict = LocalCache.of(Config.Edict, EdictParser.parseEdict(Config.Edict), true)
-    val vocabulary2 = LocalCache.of(Config.vocabPath, VocabularyParser.parseVocabulary(Config.FrequentWordsP, edict), true)
-    printInfo(vocabulary2, "Vocabulary 2")(50, true, true)
+    val kanjidic = LocalCache.of(Config.kanjidicPath, KanjidicParser.parseKanjidic(Config.kanjidicPath), true)
+    printInfo(kanjidic, "Kanjidic")()
+
+    val kanjiAlive = LocalCache.of(Config.KanjiAliveP,KanjiAliveParser.parseKanjiAlive(Config.KanjiAliveP), true)
+    printInfo(kanjiAlive, "KanjiAlive")()
+
+    val tanosKanji = LocalCache.of(Config.KanjiTanosPFreq, TanosParser.parseTanos(Config.KanjiTanosPFreq), true)
+    printInfo(tanosKanji, "Tanos Kanji")()
+
+    def combineAllMeanings(meanings: Seq[Row], tanosMeaning: Seq[(String, String)], kaMeanings: Seq[(String, String)]): Seq[(String, String)] = {
+      val ms = if (meanings != null) meanings.map { case Row(x: String, y: String) => (x, y); case _ => ("", "") } else Seq[(String, String)]()
+      val tns = if (tanosMeaning != null) tanosMeaning else Seq[(String, String)]()
+      val kans = if (kaMeanings != null) kaMeanings else Seq[(String, String)]() //toSet
+      (ms ++ tns ++ kans).toSet.toSeq
+    }
+
+    val toCombinedMeaningsSet = udf((meanings: Seq[Row], tanosMeaning: Seq[(String, String)], kaMeanings: Seq[(String, String)]) => combineAllMeanings(meanings, tanosMeaning, kaMeanings))
+
+    def parseSimpleEnglish(s: String): Seq[(String, String)] = if (s != null) s.trim.split(", ").map(t => ("en", t)) else Seq[(String, String)]()
+
+    val toTranslationArray = udf((s: String) => parseSimpleEnglish(s))
+    //println("kd meanings count: " + kanjidic.filter(r => getFld(r, "kdMeanings") != "").count)
+    val combinedMeanings = kanjidic
+      .join(kanjiAlive, kanjidic("literal") === kanjiAlive("kaKanji"), "fullouter")
+      .join(tanosKanji, kanjidic("literal") === tanosKanji("tanosKanji"), "fullouter")
+      .withColumn("meanings", toCombinedMeaningsSet('kdMeanings, toTranslationArray('tanosMeaning), toTranslationArray('kaMeanings)))
+      .select('literal, 'meanings)
+      .withColumnRenamed("literal", "cmLiteral")
+      .alias("combinedMeanings")
+    printInfo(combinedMeanings, "Meanings")(50, true, true)
+
+
     //END REFACTORING CODE
 
     //Parse the thing
@@ -273,7 +279,10 @@ object Parser {
     printInfo(kanjis, "Kanjis")(50, true, true)
     printInfo(vocabulary, "Vocabulary")(50, true, true)
 
-    println("joining vocabs with kanji")
+    println("-- joining vocabs <-> kanji-- ")
+
+    def getFld(r: Row, name: String) = r.getString(r.fieldIndex(name))
+    def filterWord(r: Row): String = getFld(r, "word")
 
     def containsKanjiFilter(r: Row): Boolean = filterWord(r).containsKanji
     val uExtractKanjiFromVocab = udf((word:String) => word.extractUniqueKanji.map(_.toString).toSeq)
