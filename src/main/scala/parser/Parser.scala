@@ -128,56 +128,15 @@ object Parser {
       printInfo(vocabulary, "Vocabulary")(500)
 
       val kanjiReadings = ReadingParser.inferReadingsFromVocab(vocabulary) //rename inferedReadings
-      printInfo(kanjiReadings, "KanjiReadings2")()
+      printInfo(kanjiReadings, "KanjiReadings")()
 
-      //Readings from dics
-    def mapKDReadingsKun(rs: Seq[Row], k: String, t: String) = {
-      val kuns = if (k != null && k.trim != "") k.split("、") else Array[String]() //.map(_.toHiragana())
-      val tkuns = if (k != null && k.trim != "") k.split(" ").flatMap(_.split("、")) else Array[String]()
-      val kdicsKun = rs.flatMap {
-        case Row(x: String, y: String) if (x == "ja_kun" && y != "") => (Some(y)) // .replace("-", "") //ignores endings & positions in kanjidic
-        case _ => None
-      }
-      kuns ++ kdicsKun.map(_.split('.').head) ++ tkuns.map(_.split('.').head)
-    }
+      val dicReadings = ReadingParser.parseReadingsFromDictionaries(lvlsRaw,kanjidic, kanjiAlive, tanosKanji)
+      printInfo(dicReadings, "dicReadings")()
 
-    val uMapKDReadingsKun = udf((rs: Seq[Row], k: String, t: String) => mapKDReadingsKun(rs, k, t))
+      val readingsDF = ReadingParser.combineInferedReadingsWithDicReadings(kanjiReadings, dicReadings)
+      printInfo(readingsDF, "Readings")()
 
-    def mapKDReadingsOn(rs: Seq[Row], y: String, t: String) = {
-      val ons = if (y != null && y.trim != "") y.split("、") else Array[String]()
-      val tons = if (y != null && y.trim != "") y.split(" ").flatMap(_.split("、")) else Array[String]()
-      val kdicsOn = rs.flatMap {
-        case Row(x: String, y: String) if (x == "ja_on" && y != "") => (Some(y)) // .replace("-", "") //ignores endings & positions in kanjidic
-        case _ => None
-      }
-      ons ++ kdicsOn.map(_.split('.').head) ++ tons.map(_.split('.').head)
-    }
-
-    val uMapKDReadingsOn = udf((rs: Seq[Row], k: String, t: String) => mapKDReadingsOn(rs, k, t))
-
-    def cleanUpR(rs: Seq[String]): Seq[String] = rs.map(_.replace("-", "")).distinct
-
-    val mapKDReadings = udf((rs: Seq[Row], k: String, y: String, tk: String, to: String) => {
-      val kunYomi = mapKDReadingsKun(rs, k, tk)
-      val onYomi = mapKDReadingsOn(rs, y, to)
-      cleanUpR((kunYomi ++ onYomi).map(_.toHiragana())) //.toSet.toSeq
-    }
-    )
-    // End Readings from dics
-
-    // -- Reading joins --
-    val uTransliterateA = udf((js: Seq[String]) => js.map(japanese => KanaTransliteration(japanese): KanaTransliteration))
-    //MUST REMOVE DUPLICATE READINGS
-    val readingsDF = lvlsRaw.join(kanjidic, lvlsRaw("kanji") === kanjidic("literal"), "left")
-      .join(kanjiAlive, lvlsRaw("kanji") === kanjiAlive("kaKanji"), "left")
-      .join(tanosKanji, lvlsRaw("kanji") === tanosKanji("tanosKanji"), "left") //not taken into consideration yet
-      //.select('kanji as "readingsKanji", mapKDReadings('kdReadings, 'kaKunYomi_ja, 'kaOnYomi_ja) as "readings", uTransliterateA(uMapKDReadingsKun('kdReadings, 'kaKunYomi_ja)) as "kunYomi", uTransliterateA(uMapKDReadingsOn('kdReadings, 'kaOnYomi_ja)) as "onYomi")
-      .select('kanji as "readingsKanji", mapKDReadings('kdReadings, 'kaKunYomi_ja, 'kaOnYomi_ja, 'tanosKunyomi, 'tanosOnyomi) as "readings", uTransliterateA(uMapKDReadingsKun('kdReadings, 'kaKunYomi_ja, 'tanosKunyomi)) as "kunYomi", uTransliterateA(uMapKDReadingsOn('kdReadings, 'kaOnYomi_ja, 'tanosOnyomi)) as "onYomi")
-    //.select('readingsKanji, 'readings, uTransliterateA('kunYomi) as "kunYomi", uTransliterateA('onYomi) as "onYomi")
-
-    readingsDF.show(21)
-
-    // --- Final Data Joins ---
+      // --- Final Data Joins ---
     val rawJointDF = lvlsRaw.alias("levelRaw").join(kanjidic, lvlsRaw("kanji") === kanjidic("literal"), "left")
       .join(allFragmentsLists, lvlsRaw("kanji") === allFragmentsLists("fKanji"), "left")
       .join(tanosKanji, lvlsRaw("kanji") === tanosKanji("tanosKanji"), "left")
