@@ -15,7 +15,6 @@ import sjt.JapaneseSyntax._
 import sjt.JapaneseInstances._
 
 //TODO: Export to Elasticsearch
-//TODO: Consolidate readings extracted from vocabulary (w/frequency) with readings extracted from dictionaries
 
 //TODO: Add resource files to build
 //TODO: Add more info to the vocabs including: rankOfKanjis(?)
@@ -178,22 +177,12 @@ object Parser {
 
     println("TrimmedDF Count: " + kanjis.count()) //expensive
 
-    // IMPORTANT !! UDF MUST NOT THROW ANY INTERNAL EXCEPTIONS; THAT INCLUDES NULL OR THEY WONT WORK
     readingsDF.show(20)
     println("Number of readings: " + readingsDF.count()) //expensive
 
-    //PROBLEM after flatmaping jcommas
-    val uMkStr = udf((a: Seq[String]) => a.mkString(","))
-
     //Writes to File
-    //Writes Readings
-    readingsDF.select('readingsKanji, uMkStr('readings) as "readings").coalesce(1).write.mode(SaveMode.Overwrite).csv("outputSF") //readings.csv
-
     (vocabulary, kanjis)
   }
-
-    //START REFACTORING CODE
-    //END REFACTORING CODE
 
     //Parse the thing
     println(Config.vocabCacheFN)
