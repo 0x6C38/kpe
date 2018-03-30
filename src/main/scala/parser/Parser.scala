@@ -325,7 +325,16 @@ object Parser {
         val uConsolidateReadings = udf((kWFreq:Seq[((String, String), Long)]) => kWFreq.map(_._1._1))
         val udfTupled = udf((k:String, r:String, n:Long) => (k, r, n))
 
-      val udfTupply = udf((kWFreq:Seq[Row]) => kWFreq.map{case Row(kr:Row,n:Long) => kr match {case Row(k:String,r:String) => (k, r, n)}})//udf((kWFreq:Seq[Row]) => kWFreq.map(r => r.getAs[Row](0).getAs[String](0)))
+    def composeWFreqs(kWFreq: Seq[(String, String, Long)], raws: Seq[KanaTransliteration]) = {
+      raws.map(k => (k, kWFreq.groupBy(_._2).get(k.hiragana))).filter(_._2.isDefined).map(t => Reading(t._1, t._2.get.head._3)).distinct
+    }
+
+    val udfComposeReadings = udf((kWFreq: Seq[Row], raws: Seq[Row]) => {
+      val ts = kWFreq.map { case Row(kr: Row, n: Long) => kr match { case Row(k: String, r: String) => (k, r, n) }
+      }
+      val rs = raws.map { case Row(original:String, hiragana:String, katakana:String, romaji:String) => KanaTransliteration.apply(original, hiragana, katakana, romaji)}
+      composeWFreqs(ts, rs)
+    }) //udf((kWFreq:Seq[Row]) => kWFreq.map(r => r.getAs[Row](0).getAs[String](0)))
 
 
     //    val uConsolidateReadings = udf((r: Seq[Row]) => r.flatMap(r1 => r1.getSeq[Long](0)))
@@ -335,7 +344,8 @@ object Parser {
       .join(tanosKanji, lvlsRaw("kanji") === tanosKanji("tanosKanji"), "left") //not taken into consideration yet
       .select('kanji as "readingsKanji", mapKDReadings('kdReadings, 'kaKunYomi_ja, 'kaOnYomi_ja, 'tanosKunyomi, 'tanosOnyomi) as "readings", uTransliterateA(uMapKDReadingsKun('kdReadings, 'kaKunYomi_ja, 'tanosKunyomi)) as "kunYomiRaw", uTransliterateA(uMapKDReadingsOn('kdReadings, 'kaOnYomi_ja, 'tanosOnyomi)) as "onYomiRaw")
       .join(kanjiReadings, col("readingsKanji") === kanjiReadings("k"), "left")
-        .withColumn("tupplied", udfTupply('readingsWFreq))
+      .withColumn("kunYomi", udfComposeReadings('readingsWFreq, 'kunYomiRaw))
+      .withColumn("onYomi", udfComposeReadings('readingsWFreq, 'onYomiRaw))
     //      Chill
 //      .drop('k)
 //      .drop('kunYomiRaw)

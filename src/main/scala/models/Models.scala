@@ -46,3 +46,5 @@ case class VocabularyDS(
                      baseForm:String,
                      translations:Seq[String]
                      )
+
+case class Reading(reading:KanaTransliteration, frequency:Long)

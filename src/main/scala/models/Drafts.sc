@@ -36,3 +36,15 @@ parseSimpleEnglish(sample3)
 def parseAllMeanings(meanings:String, English:String, kmeaning:String):Set[TEntry] = {
   Utils.parseCMeanings(meanings) ++ parseSimpleEnglish(English) ++ parseSimpleEnglish(kmeaning) toSet
 }
+
+
+import models.KanaTransliteration
+
+val kWFreq = Seq(("h", "hi", 5), ("o", "omg", 2), ("l", "lol", 1)).groupBy(_._2)
+val raws = Seq(KanaTransliteration("h", "hi", "nuj", "niun"), KanaTransliteration("h", "lol", "nuj", "niun"),
+  KanaTransliteration("notrly", "no", "g", "hbt5r"), KanaTransliteration("h", "lol", "nuj", "niun"))
+
+case class Reading(reading:KanaTransliteration, frequency:Long)
+//kWFreq.groupBy(_._2)
+kWFreq.get("hi")
+raws.map(k => (k, kWFreq.get(k.hiragana))).filter(_._2.isDefined).map(t => Reading(t._1, (t._2.get.head)._3)).distinct
