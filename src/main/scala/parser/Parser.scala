@@ -127,22 +127,8 @@ object Parser {
       val vocabulary = LocalCache.of(Config.vocabPath, VocabularyParser.parseVocabulary(Config.FrequentWordsP, edict), true).cache()
       printInfo(vocabulary, "Vocabulary")(500)
 
-      //Readings from words
-      val uExtractKanji = udf((r: Row) => r match {
-        case Row(x: String, y: String) => x: String
-        case _ => ""
-      })
-      val flatten = udf((xs: Seq[Seq[(String, String)]]) => xs.flatten)
-      val kanjiReadings = vocabulary.select('word, 'totalOcurrences, explode('furigana) as "furigana")
-        .groupBy('furigana)
-        .agg(sum('totalOcurrences) as "Occ")
-        .orderBy('furigana)
-        .withColumn("k", uExtractKanji('furigana))
-        .groupBy('k)
-        .agg(collect_list(struct('furigana, 'Occ)) as "readingsWFreq") //if doesn't work remove struct
-
-      kanjiReadings.show(31, false)
-      //End Readings from words
+      val kanjiReadings = ReadingParser.inferReadingsFromVocab(vocabulary) //rename inferedReadings
+      printInfo(kanjiReadings, "KanjiReadings2")()
 
       //Readings from dics
     def mapKDReadingsKun(rs: Seq[Row], k: String, t: String) = {
@@ -249,10 +235,10 @@ object Parser {
 
     //START REFACTORING CODE
     val edict = LocalCache.of(Config.Edict, EdictParser.parseEdict(Config.Edict), true)
-//    printInfo(edict, "Edict")()
     val vocabulary2 = LocalCache.of(Config.vocabPath, VocabularyParser.parseVocabulary(Config.FrequentWordsP, edict), true).cache()
-    printInfo(vocabulary2, "Vocabulary")(50, schema = true)
+//    printInfo(vocabulary2, "Vocabulary")(50, schema = true)
 
+    //INFER FROM VOCAB
     val uExtractKanji = udf((r: Row) => r match {
       case Row(x: String, y: String) => x: String
       case _ => ""
@@ -265,8 +251,13 @@ object Parser {
       .withColumn("k", uExtractKanji('furigana))
       .groupBy('k)
       .agg(collect_list(struct('furigana, 'Occ)) as "readingsWFreq") //if doesn't work remove struct
-
     printInfo(kanjiReadings, "KanjiReadings")(50, true, true)
+
+    //REPLACEMENT
+    val kanjiReadings2 = ReadingParser.inferReadingsFromVocab(vocabulary2) //rename inferedReadings
+    printInfo(kanjiReadings2, "KanjiReadings2")(50, true, true)
+    //REPLACEMENT
+    /// END INFER FROM VOCAB
 
     //Readings from dics
     val lvlsRaw = spark.read.json(Config.levelsPath).cache()
@@ -281,6 +272,7 @@ object Parser {
     val tanosKanji = LocalCache.of(Config.KanjiTanosPFreq, TanosParser.parseTanos(Config.KanjiTanosPFreq), true)
 //    printInfo(tanosKanji, "Tanos Kanji")()
 
+    //FROM HERE DICS PARSE
     def mapKDReadingsKun(rs: Seq[Row], k: String, t: String) = {
       val kuns = if (k != null && k.trim != "") k.split("、") else Array[String]() //.map(_.toHiragana())
       val tkuns = if (k != null && k.trim != "") k.split(" ").flatMap(_.split("、")) else Array[String]()
@@ -317,13 +309,6 @@ object Parser {
 
     // -- Reading joins --
     val uTransliterateA = udf((js: Seq[String]) => js.map(japanese => KanaTransliteration(japanese): KanaTransliteration))
-    // struct<_1:string,_2:array<struct<_1:struct<_1:string,_2:string>,_2:int>>>
-//      (String, Seq[((String, String), Int)])
-//    val uConsolidateReadings = udf((kWFreq:Seq[((String, String), Long)], reads:Seq[KanaTransliteration]) => kWFreq.map(_._2))
-//    val uConsolidateReadings = udf((a:Any) => a)
-        def consolidateReadings(x:String, y:String, l:Long) = l
-        val uConsolidateReadings = udf((kWFreq:Seq[((String, String), Long)]) => kWFreq.map(_._1._1))
-        val udfTupled = udf((k:String, r:String, n:Long) => (k, r, n))
 
     def composeWFreqs(kWFreq: Seq[(String, String, Long)], raws: Seq[KanaTransliteration]) = {
       raws.map(k => (k, kWFreq.groupBy(_._2).get(k.hiragana))).filter(_._2.isDefined).map(t => Reading(t._1, t._2.get.head._3)).distinct
@@ -334,37 +319,34 @@ object Parser {
       }
       val rs = raws.map { case Row(original:String, hiragana:String, katakana:String, romaji:String) => KanaTransliteration.apply(original, hiragana, katakana, romaji)}
       composeWFreqs(ts, rs)
-    }) //udf((kWFreq:Seq[Row]) => kWFreq.map(r => r.getAs[Row](0).getAs[String](0)))
+    })
 
-
-    //    val uConsolidateReadings = udf((r: Seq[Row]) => r.flatMap(r1 => r1.getSeq[Long](0)))
-
-    val readingsDF = lvlsRaw.join(kanjidic, lvlsRaw("kanji") === kanjidic("literal"), "left")
+    val dicReadings = lvlsRaw.join(kanjidic, lvlsRaw("kanji") === kanjidic("literal"), "left")
       .join(kanjiAlive, lvlsRaw("kanji") === kanjiAlive("kaKanji"), "left")
       .join(tanosKanji, lvlsRaw("kanji") === tanosKanji("tanosKanji"), "left") //not taken into consideration yet
       .select('kanji as "readingsKanji", mapKDReadings('kdReadings, 'kaKunYomi_ja, 'kaOnYomi_ja, 'tanosKunyomi, 'tanosOnyomi) as "readings", uTransliterateA(uMapKDReadingsKun('kdReadings, 'kaKunYomi_ja, 'tanosKunyomi)) as "kunYomiRaw", uTransliterateA(uMapKDReadingsOn('kdReadings, 'kaOnYomi_ja, 'tanosOnyomi)) as "onYomiRaw")
-      .join(kanjiReadings, col("readingsKanji") === kanjiReadings("k"), "left")
+    printInfo(dicReadings, "dicReadings")(100, true, true)
+
+    //REPLACEMENT
+    val dicReadings2 = ReadingParser.parseReadingsFromDictionaries(lvlsRaw,kanjidic, kanjiAlive, tanosKanji)
+    printInfo(dicReadings2, "dicReadings2")(100, true, true)
+    //END REPLACEMENT
+
+      val readingsDF = dicReadings
+      .join(kanjiReadings, col("readingsKanji") === kanjiReadings("k"), "left") //TO BEFORE HERE
       .withColumn("kunYomi", udfComposeReadings('readingsWFreq, 'kunYomiRaw))
       .withColumn("onYomi", udfComposeReadings('readingsWFreq, 'onYomiRaw))
-    //      Chill
-//      .drop('k)
-//      .drop('kunYomiRaw)
-//      .drop('onYomiRaw)
-//      .drop('readings)
-//      .withColumnRenamed("readingsKanji", "ka")
-//      .withColumn("readingsWFreq", explode($"readingsWFreq"))
-//      .select("ka", "readingsWFreq.furigana.*", "readingsWFreq.Occ")
-//      .withColumn("tupledLOL", udfTupled('_1, '_2, 'Occ))
-//      .groupBy("ka").agg(collect_list("tupledLOL").as("tupledLOL2"))
-//      .withColumn("mmSummed", udfSumm2('tupledLOL2) as "hey")
-////      .groupBy("ka").agg(collect_list("_1").as("K"),
-////                               collect_list("_2").as("R"),
-////                               collect_list("Occ").as("N"))
+      .drop('kunYomiRaw).drop('onYomiRaw).drop('k)
 
     readingsDF.show(99, false)
+    printInfo(readingsDF, "ReadingsJoint")(100, true, true)
+    val readingsDF2 = ReadingParser.combineInferedReadingsWithDicReadings(kanjiReadings2, dicReadings2)
+    readingsDF2.show(99, false)
+    printInfo(readingsDF2, "ReadingsJoint 2")(100, true, true)
 
-//Join here
-    printInfo(readingsDF, "ReadingsJoint")(100, false, true)
+    val readingsDF3 = ReadingParser.parseAllReadings(vocabulary2, lvlsRaw, kanjidic, kanjiAlive, tanosKanji)
+    readingsDF3.show(99, false)
+    printInfo(readingsDF3, "ReadingsJoint 3")(100, true, true)
 
 
     //END REFACTORING CODE
