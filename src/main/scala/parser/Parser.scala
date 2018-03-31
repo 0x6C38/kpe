@@ -20,6 +20,7 @@ import sjt.JapaneseInstances._
 //TODO: Add more info to the vocab including: rankOfKanjis(?)
 //TODO: Get recursive components for kanjis with their ranks and the rank of their readings
 //TODO: Fix radical column
+//TODO: Include tanos when parsing dic readings
 
 object Parser {
   //val logFile = "/opt/spark-2.1.0-bin-hadoop2.7/README.md" // Should be some file on your system
