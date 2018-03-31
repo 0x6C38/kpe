@@ -128,14 +128,14 @@ object Parser {
     val vocabulary = LocalCache.of(Config.vocabPath, VocabularyParser.parseVocabulary(Config.FrequentWordsP, edict), true).cache()
     printInfo(vocabulary, "Vocabulary")(100)
 
-    val inferedReadings = ReadingParser.inferReadingsFromVocab(vocabulary) //rename inferedReadings
+    val inferedReadings = ReadingParser.inferReadingsFromVocab(vocabulary)
     printInfo(inferedReadings, "KanjiReadings")()
 
     val dicReadings = ReadingParser.parseReadingsFromDictionaries(lvlsRaw,kanjidic, kanjiAlive, tanosKanji)
     printInfo(dicReadings, "dicReadings")()
 
-    val readingsDF = ReadingParser.combineInferedReadingsWithDicReadings(inferedReadings, dicReadings)
-    printInfo(readingsDF, "Readings")()
+    val readings = ReadingParser.combineInferedReadingsWithDicReadings(inferedReadings, dicReadings)
+    printInfo(readings, "Readings")()
 
     // --- Final Data Joins ---
     val rawJointDF = lvlsRaw.alias("levelRaw").join(kanjidic, lvlsRaw("kanji") === kanjidic("literal"), "left")
@@ -146,7 +146,7 @@ object Parser {
       .join(kanjiFreqs, lvlsRaw("kanji") === kanjiFreqs("freqKanji"), "left")
       .join(combinedMeanings, lvlsRaw("kanji") === combinedMeanings("cmLiteral"), "left") //.join(combinedMeanings, col("levelRaw.kanji") === col("combinedMeanings.cmLiteral"), "left")
       .join(inferedReadings, lvlsRaw("kanji") === inferedReadings("k"))
-      .join(readingsDF, col("levelRaw.kanji") === readingsDF("readingsKanji"), "left")
+      .join(readings, col("levelRaw.kanji") === readings("readingsKanji"), "left")
       .cache
     //.join(vocabSpark, lvlsRaw("kanji") === vocabSpark("_1"),"left") //Correct _1 name //*
     rawJointDF.show(22)
@@ -178,8 +178,8 @@ object Parser {
     printInfo(kanjis, "Kanjis")(50, true, true)
     printInfo(vocabulary, "Vocabulary")(50, true, true)
 
-    readingsDF.show(20)
-    println("Number of readings: " + readingsDF.count()) //expensive
+    readings.show(20)
+    println("Number of readings: " + readings.count()) //expensive
 
     println("-- joining vocabs <-> kanji-- ")
     val vocabPerKanji = extractVocabsForKanji(vocabulary)
