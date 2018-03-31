@@ -17,18 +17,16 @@ import sjt.JapaneseInstances._
 //TODO: Export to Elasticsearch
 
 //TODO: Add resource files to build
-//TODO: Add more info to the vocabs including: rankOfKanjis(?)
-//TODO: Get recursive components for kanjis with their ranks and the ranks of their readings
+//TODO: Add more info to the vocab including: rankOfKanjis(?)
+//TODO: Get recursive components for kanjis with their ranks and the rank of their readings
 //TODO: Fix radical column
-//TODO: Write final vocab to file
-//TODO: Export kanjis
 
 object Parser {
   //val logFile = "/opt/spark-2.1.0-bin-hadoop2.7/README.md" // Should be some file on your system
   implicit val spark: SparkSession = SparkSession.builder.master("local").getOrCreate
   val conf = new SparkConf().setMaster("local[*]").setAppName("Simple Application")
 
-  import spark.implicits._ //necesary import
+  import spark.implicits._
 
   //To reduce spark output
   import org.apache.log4j.{Level, Logger}
@@ -42,7 +40,7 @@ object Parser {
     def containsKanjiFilter(r: Row): Boolean = filterWord(r).containsKanji
     val uExtractKanjiFromVocab = udf((word:String) => word.extractUniqueKanji.map(_.toString).toSeq)
 
-    val vocabPerKanji: Dataset[Row] = vocabulary.filter(r => containsKanjiFilter(r)) //.filter(r => containsJoyoKFilter(r)) //not worth
+    val vocabPerKanji: Dataset[Row] = vocabulary.filter(r => containsKanjiFilter(r))
       .withColumn("vocabKanji", uExtractKanjiFromVocab('word))
       .withColumn("vocabZipped", struct(vocabulary.columns.head, vocabulary.columns.tail: _*))
       .select('word, explode('vocabKanji) as "vocabK", 'vocabZipped)
@@ -128,13 +126,13 @@ object Parser {
     val vocabulary = LocalCache.of(Config.vocabPath, VocabularyParser.parseVocabulary(Config.FrequentWordsP, edict), true).cache()
     printInfo(vocabulary, "Vocabulary")(100)
 
-    val inferedReadings = ReadingParser.inferReadingsFromVocab(vocabulary)
+    val inferedReadings = LocalCache.of(Config.inferedReadings, ReadingParser.inferReadingsFromVocab(vocabulary), true)
     printInfo(inferedReadings, "KanjiReadings")()
 
-    val dicReadings = ReadingParser.parseReadingsFromDictionaries(lvlsRaw,kanjidic, kanjiAlive, tanosKanji)
+    val dicReadings = LocalCache.of(Config.dicReadings, ReadingParser.parseReadingsFromDictionaries(lvlsRaw,kanjidic, kanjiAlive, tanosKanji), true)
     printInfo(dicReadings, "dicReadings")()
 
-    val readings = ReadingParser.combineInferedReadingsWithDicReadings(inferedReadings, dicReadings)
+    val readings = LocalCache.of(Config.allReadings, ReadingParser.combineInferedReadingsWithDicReadings(inferedReadings, dicReadings), true)
     printInfo(readings, "Readings")()
 
     // --- Final Data Joins ---

@@ -39,4 +39,8 @@ object Config {
   val CompositionsPath = standardPath + "cjk-decomp-0.4.0.txt"
 
   val mCombinedP = standardPath + "combined-meanings"
+  val inferedReadings: String = standardPath + "inferred-readings"
+  val dicReadings: String = standardPath + "dic-readings"
+  val allReadings: String = standardPath + "all-readings"
+
 }
