@@ -83,7 +83,7 @@ object ReadingParser {
     dictionaryReadings.join(inferedReadings, col("readingsKanji") === inferedReadings("k"), "left")
       .withColumn("kunYomi", udfComposeReadings('readingsWFreq, 'kunYomiRaw))
       .withColumn("onYomi", udfComposeReadings('readingsWFreq, 'onYomiRaw))
-      .drop('kunYomiRaw).drop('onYomiRaw).drop('k)
+      .drop('kunYomiRaw).drop('onYomiRaw).drop('k).drop('readingsWFreq)
   }
 
   def parseAllReadings(vocabulary: DataFrame, lvlsRaw: DataFrame, kanjidic: DataFrame, kanjiAlive: DataFrame, tanosKanji: DataFrame)(implicit spark: SparkSession): DataFrame = {

@@ -80,71 +80,73 @@ object Parser {
   }
 
   def main(args: Array[String]): Unit = {
-    def read(path: String): Try[DataFrame] = Try(spark.read.parquet(path))
+    parseAll
+    spark.stop
+  }
 
-    def parseAll = {
-      //--- Errors ---
-      //val radicals = spark.read.json(ScalaConfig.KanjiAliveRadicalP) //radical isn't properly encoded in file it seems //EN EL ARCHIVO ORIGINAL POR ESO
-      //val kanjiVG = spark.read.json(ScalaConfig.KanjiVGDP) //returns empty
+  def parseAll = {
+    //--- Errors ---
+    //val radicals = spark.read.json(ScalaConfig.KanjiAliveRadicalP) //radical isn't properly encoded in file it seems //EN EL ARCHIVO ORIGINAL POR ESO
+    //val kanjiVG = spark.read.json(ScalaConfig.KanjiVGDP) //returns empty
 
-      val wikiRadicals = spark.read.json(Config.WikiRadsDP)
+    val wikiRadicals = spark.read.json(Config.WikiRadsDP)
 
-      val lvlsRaw = spark.read.json(Config.levelsPath).cache()
-      printInfo(lvlsRaw, "LvlsRaw")()
+    val lvlsRaw = spark.read.json(Config.levelsPath).cache()
+    printInfo(lvlsRaw, "LvlsRaw")()
 
-      //    val translationsDictionary = spark.read.json(ScalaConfig.JmDicP) //incorrect formatting //Should eventually use instead of EDICT
-      val edict = LocalCache.of(Config.Edict, EdictParser.parseEdict(Config.Edict), true)
-      printInfo(edict, "Edict")()
+    //    val translationsDictionary = spark.read.json(ScalaConfig.JmDicP) //incorrect formatting //Should eventually use instead of EDICT
+    val edict = LocalCache.of(Config.Edict, EdictParser.parseEdict(Config.Edict), true)
+    printInfo(edict, "Edict")()
 
-      val kanjiFreqs = FreqParser.parseAll(Config.aoFreq, Config.twitterFreq, Config.wikipediaFreq, Config.newsFreq, Config.allFreqs)
-      printInfo(kanjiFreqs, "Kanji Freqs")()
+    val kanjiFreqs = FreqParser.parseAll(Config.aoFreq, Config.twitterFreq, Config.wikipediaFreq, Config.newsFreq, Config.allFreqs)
+    printInfo(kanjiFreqs, "Kanji Freqs")()
 
-      val kanjidic = LocalCache.of(Config.kanjidicPath, KanjidicParser.parseKanjidic(Config.kanjidicPath), true)
-      printInfo(kanjidic, "Kanjidic")()
+    val kanjidic = LocalCache.of(Config.kanjidicPath, KanjidicParser.parseKanjidic(Config.kanjidicPath), true)
+    printInfo(kanjidic, "Kanjidic")()
 
-      val kanjiAlive = LocalCache.of(Config.KanjiAliveP,KanjiAliveParser.parseKanjiAlive(Config.KanjiAliveP), true)
-      printInfo(kanjiAlive, "KanjiAlive")()
+    val kanjiAlive = LocalCache.of(Config.KanjiAliveP,KanjiAliveParser.parseKanjiAlive(Config.KanjiAliveP), true)
+    printInfo(kanjiAlive, "KanjiAlive")()
 
-      val tanosKanji = LocalCache.of(Config.KanjiTanosPFreq, TanosParser.parseTanos(Config.KanjiTanosPFreq), true)
-      printInfo(tanosKanji, "Tanos Kanji")()
+    val tanosKanji = LocalCache.of(Config.KanjiTanosPFreq, TanosParser.parseTanos(Config.KanjiTanosPFreq), true)
+    printInfo(tanosKanji, "Tanos Kanji")()
 
-      val tatoes = spark.read.json(Config.TatoebaDP)
-      printInfo(tatoes, "Tatoes Kanji")()
+    val tatoes = spark.read.json(Config.TatoebaDP)
+    printInfo(tatoes, "Tatoes Kanji")()
 
-      val rawComps = spark.read.textFile(Config.CompositionsPath).filter(l => l.startsWith(l.head + ":") && l.head.isKanji)
-      val comps = rawComps.map(l => l.head.toString -> Composition.parseKCompLine(l))
-        .withColumnRenamed("_1", "cKanji")
-        .withColumnRenamed("_2", "components")
+    val rawComps = spark.read.textFile(Config.CompositionsPath).filter(l => l.startsWith(l.head + ":") && l.head.isKanji)
+    val comps = rawComps.map(l => l.head.toString -> Composition.parseKCompLine(l))
+      .withColumnRenamed("_1", "cKanji")
+      .withColumnRenamed("_2", "components")
 
-      val allFragmentsLists = spark.read.option("delimiter", ":").format("csv").load(Config.KradFN)
-        .withColumnRenamed("_c0", "fKanji").withColumnRenamed("_c1", "ffragments")
-        .withColumn("fKanji", trim(col("fKanji"))).withColumn("ffragments", trim(col("ffragments"))) //must trim to match
+    val allFragmentsLists = spark.read.option("delimiter", ":").format("csv").load(Config.KradFN)
+      .withColumnRenamed("_c0", "fKanji").withColumnRenamed("_c1", "ffragments")
+      .withColumn("fKanji", trim(col("fKanji"))).withColumn("ffragments", trim(col("ffragments"))) //must trim to match
 
-      val combinedMeanings = LocalCache.of(Config.mCombinedP, MeaningCombiner.combineMeanings(kanjidic, kanjiAlive, tanosKanji), true)
-      printInfo(combinedMeanings, "Meanings")()
+    val combinedMeanings = LocalCache.of(Config.mCombinedP, MeaningCombiner.combineMeanings(kanjidic, kanjiAlive, tanosKanji), true)
+    printInfo(combinedMeanings, "Meanings")()
 
-      val vocabulary = LocalCache.of(Config.vocabPath, VocabularyParser.parseVocabulary(Config.FrequentWordsP, edict), true).cache()
-      printInfo(vocabulary, "Vocabulary")(500)
+    val vocabulary = LocalCache.of(Config.vocabPath, VocabularyParser.parseVocabulary(Config.FrequentWordsP, edict), true).cache()
+    printInfo(vocabulary, "Vocabulary")(100)
 
-      val kanjiReadings = ReadingParser.inferReadingsFromVocab(vocabulary) //rename inferedReadings
-      printInfo(kanjiReadings, "KanjiReadings")()
+    val kanjiReadings = ReadingParser.inferReadingsFromVocab(vocabulary) //rename inferedReadings
+    printInfo(kanjiReadings, "KanjiReadings")()
 
-      val dicReadings = ReadingParser.parseReadingsFromDictionaries(lvlsRaw,kanjidic, kanjiAlive, tanosKanji)
-      printInfo(dicReadings, "dicReadings")()
+    val dicReadings = ReadingParser.parseReadingsFromDictionaries(lvlsRaw,kanjidic, kanjiAlive, tanosKanji)
+    printInfo(dicReadings, "dicReadings")()
 
-      val readingsDF = ReadingParser.combineInferedReadingsWithDicReadings(kanjiReadings, dicReadings)
-      printInfo(readingsDF, "Readings")()
+    val readingsDF = ReadingParser.combineInferedReadingsWithDicReadings(kanjiReadings, dicReadings)
+    printInfo(readingsDF, "Readings")()
 
-      // --- Final Data Joins ---
+    // --- Final Data Joins ---
     val rawJointDF = lvlsRaw.alias("levelRaw").join(kanjidic, lvlsRaw("kanji") === kanjidic("literal"), "left")
       .join(allFragmentsLists, lvlsRaw("kanji") === allFragmentsLists("fKanji"), "left")
       .join(tanosKanji, lvlsRaw("kanji") === tanosKanji("tanosKanji"), "left")
       .join(kanjiAlive, lvlsRaw("kanji") === kanjiAlive("kaKanji"), "left")
       .join(comps, lvlsRaw("kanji") === comps("cKanji"), "left")
       .join(kanjiFreqs, lvlsRaw("kanji") === kanjiFreqs("freqKanji"), "left")
-      .join(combinedMeanings, col("levelRaw.kanji") === col("combinedMeanings.cmLiteral"), "left")
-      .join(readingsDF, col("levelRaw.kanji") === readingsDF("readingsKanji"), "left")
+      .join(combinedMeanings, lvlsRaw("kanji") === combinedMeanings("cmLiteral"), "left") //.join(combinedMeanings, col("levelRaw.kanji") === col("combinedMeanings.cmLiteral"), "left")
       .join(kanjiReadings, lvlsRaw("kanji") === kanjiReadings("k"))
+      .join(readingsDF, col("levelRaw.kanji") === readingsDF("readingsKanji"), "left")
       .cache
     //.join(vocabSpark, lvlsRaw("kanji") === vocabSpark("_1"),"left") //Correct _1 name //*
     rawJointDF.show(22)
@@ -158,14 +160,14 @@ object Parser {
       .drop(col("tanosJlpt")).drop(col("kdJlpt"))
       .drop(col("tanosKunyomi")).drop(col("tanosOnyomi"))
       .drop(col("kgrade")).drop(col("kstroke"))
-      .drop('kdMeanings) //drops redundant meanings columns
-      .drop('tanosMeaning).drop('kaMeanings)
+      .drop('kdMeanings).drop('tanosMeaning).drop('kaMeanings) //drops redundant meanings columns
       .drop("cmLiteral")
       .drop('readingsKanji) //drops redundant readings columns
       .drop(col("kdReadings")).drop('readings)
       .drop(col("kaKunYomi_ja")).drop(col("kaOnYomi_ja")).drop(col("kaKunYomi")).drop(col("kaOnYomi"))
       .drop('k)
       .drop('kdFreq)
+      .drop('readingsWFreq)
     //.orderBy(col("jlpt")) //can't resolve
     jointDF.show(23)
 
@@ -173,30 +175,13 @@ object Parser {
       .drop(col("query_codes"))
       .orderBy(col("rank"))
 
-    kanjis.show(50)
-
-    println("TrimmedDF Count: " + kanjis.count()) //expensive
+    printInfo(kanjis, "Kanjis")(50, true, true)
+    printInfo(vocabulary, "Vocabulary")(50, true, true)
 
     readingsDF.show(20)
     println("Number of readings: " + readingsDF.count()) //expensive
 
-    //Writes to File
-    (vocabulary, kanjis)
-  }
-
-    //Parse the thing
-    println(Config.vocabCacheFN)
-    println(Config.kanjiCacheFN)
-    val (vocabulary:DataFrame, kanjis:DataFrame) = (read(Config.vocabCacheFN), read(Config.kanjiCacheFN)) match {
-      case (Success(vocab), Success(kanjis)) => (vocab, kanjis)
-      case _ => parseAll
-    }
-
-    printInfo(kanjis, "Kanjis")(50, true, true)
-    printInfo(vocabulary, "Vocabulary")(50, true, true)
-
     println("-- joining vocabs <-> kanji-- ")
-
     val vocabPerKanji = extractVocabsForKanji(vocabulary)
 
     val jointKV = kanjis.join(vocabPerKanji, kanjis("kanji") === vocabPerKanji("vocabK"), "left").drop('vocabK)
@@ -210,6 +195,7 @@ object Parser {
     jointVK.show(48, false)
 
     /* Commented for dealing with cache
+    //Writes to File
     //Writes Kanji (multiple files)
     kanjis.write.mode(SaveMode.Overwrite).json("output")
     //Writes Kanji (single file)
@@ -219,6 +205,5 @@ object Parser {
     //vocabulary.coalesce(1).write.mode(SaveMode.Overwrite).json("vocab")
     vocabulary.coalesce(1).write.mode(SaveMode.Overwrite).parquet(ScalaConfig.vocabCache)
 */
-    spark.stop
   }
 }
