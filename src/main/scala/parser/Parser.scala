@@ -128,13 +128,13 @@ object Parser {
     val vocabulary = LocalCache.of(Config.vocabPath, VocabularyParser.parseVocabulary(Config.FrequentWordsP, edict), true).cache()
     printInfo(vocabulary, "Vocabulary")(100)
 
-    val kanjiReadings = ReadingParser.inferReadingsFromVocab(vocabulary) //rename inferedReadings
-    printInfo(kanjiReadings, "KanjiReadings")()
+    val inferedReadings = ReadingParser.inferReadingsFromVocab(vocabulary) //rename inferedReadings
+    printInfo(inferedReadings, "KanjiReadings")()
 
     val dicReadings = ReadingParser.parseReadingsFromDictionaries(lvlsRaw,kanjidic, kanjiAlive, tanosKanji)
     printInfo(dicReadings, "dicReadings")()
 
-    val readingsDF = ReadingParser.combineInferedReadingsWithDicReadings(kanjiReadings, dicReadings)
+    val readingsDF = ReadingParser.combineInferedReadingsWithDicReadings(inferedReadings, dicReadings)
     printInfo(readingsDF, "Readings")()
 
     // --- Final Data Joins ---
@@ -145,7 +145,7 @@ object Parser {
       .join(comps, lvlsRaw("kanji") === comps("cKanji"), "left")
       .join(kanjiFreqs, lvlsRaw("kanji") === kanjiFreqs("freqKanji"), "left")
       .join(combinedMeanings, lvlsRaw("kanji") === combinedMeanings("cmLiteral"), "left") //.join(combinedMeanings, col("levelRaw.kanji") === col("combinedMeanings.cmLiteral"), "left")
-      .join(kanjiReadings, lvlsRaw("kanji") === kanjiReadings("k"))
+      .join(inferedReadings, lvlsRaw("kanji") === inferedReadings("k"))
       .join(readingsDF, col("levelRaw.kanji") === readingsDF("readingsKanji"), "left")
       .cache
     //.join(vocabSpark, lvlsRaw("kanji") === vocabSpark("_1"),"left") //Correct _1 name //*
@@ -194,36 +194,38 @@ object Parser {
     val jointVK = vocabulary.join(kanjiPerVocab, kanjiPerVocab("wordK") === vocabulary("word")).drop('wordK)
     jointVK.show(48, false)
 
-    // --> Writes to File <--
-    //Writes Kanji
-    //Writes Kanji (default partitioning)
-    kanjis.write.mode(SaveMode.Overwrite).json("output-kanji-default")
-    //Writes Kanji (single partition)
-    kanjis.coalesce(1).write.mode(SaveMode.Overwrite).json("output-kanji-single")
-    //Writes Kanji (one partition per entry)
-    kanjis.repartition(kanjis.count().toInt).write.mode(SaveMode.Overwrite).json("output-kanji-individual")
+    println("---> End of transformations <---")
 
-    //Writes Kanji with Vocab
-    //Writes Joint Vocab with Kanji (default partitioning)
-    jointKV.write.mode(SaveMode.Overwrite).json("output-kanji-with-vocab-default")
-    //Writes Joint Vocab with Kanji (single partition)
-    jointKV.coalesce(1).write.mode(SaveMode.Overwrite).json("output-kanji-with-vocab-single")
-    //Writes Joint Vocab with Kanji (one partition per entry)
-    jointKV.repartition(jointKV.count().toInt).write.mode(SaveMode.Overwrite).json("output-kanji-with-vocab-individual")
-
-    //Writes Vocabulary
-    //Writes Vocabulary (default partitioning)
-    vocabulary.write.mode(SaveMode.Overwrite).json("output-vocab-default")
-    //Writes Vocabulary (single partition)
-    vocabulary.coalesce(1).write.mode(SaveMode.Overwrite).json("output-vocab-single")
-    //Writes Vocabulary (one partition per entry). Error: produces 360k files.
-//    vocabulary.repartition(vocabulary.count().toInt).write.mode(SaveMode.Overwrite).json("output-vocab-individual")
-
-    //Writes Vocab with Kanji
-    //Writes Joint Vocab with Kanji (default partitioning)
-    jointVK.write.mode(SaveMode.Overwrite).json("output-vocab-with-kanji-default")
-    //Writes Joint Vocab with Kanji (single partition)
-    jointVK.coalesce(1).write.mode(SaveMode.Overwrite).json("output-vocab-with-kanji-single")
+//    // --> Writes to File <--
+//    //Writes Kanji
+//    //Writes Kanji (default partitioning)
+//    kanjis.write.mode(SaveMode.Overwrite).json("output-kanji-default")
+//    //Writes Kanji (single partition)
+//    kanjis.coalesce(1).write.mode(SaveMode.Overwrite).json("output-kanji-single")
+//    //Writes Kanji (one partition per entry)
+//    kanjis.repartition(kanjis.count().toInt).write.mode(SaveMode.Overwrite).json("output-kanji-individual")
+//
+//    //Writes Kanji with Vocab
+//    //Writes Joint Vocab with Kanji (default partitioning)
+//    jointKV.write.mode(SaveMode.Overwrite).json("output-kanji-with-vocab-default")
+//    //Writes Joint Vocab with Kanji (single partition)
+//    jointKV.coalesce(1).write.mode(SaveMode.Overwrite).json("output-kanji-with-vocab-single")
+//    //Writes Joint Vocab with Kanji (one partition per entry)
+//    jointKV.repartition(jointKV.count().toInt).write.mode(SaveMode.Overwrite).json("output-kanji-with-vocab-individual")
+//
+//    //Writes Vocabulary
+//    //Writes Vocabulary (default partitioning)
+//    vocabulary.write.mode(SaveMode.Overwrite).json("output-vocab-default")
+//    //Writes Vocabulary (single partition)
+//    vocabulary.coalesce(1).write.mode(SaveMode.Overwrite).json("output-vocab-single")
+//    //Writes Vocabulary (one partition per entry). Error: produces 360k files.
+////    vocabulary.repartition(vocabulary.count().toInt).write.mode(SaveMode.Overwrite).json("output-vocab-individual")
+//
+//    //Writes Vocab with Kanji
+//    //Writes Joint Vocab with Kanji (default partitioning)
+//    jointVK.write.mode(SaveMode.Overwrite).json("output-vocab-with-kanji-default")
+//    //Writes Joint Vocab with Kanji (single partition)
+//    jointVK.coalesce(1).write.mode(SaveMode.Overwrite).json("output-vocab-with-kanji-single")
 
   }
 }
