@@ -194,16 +194,36 @@ object Parser {
     val jointVK = vocabulary.join(kanjiPerVocab, kanjiPerVocab("wordK") === vocabulary("word")).drop('wordK)
     jointVK.show(48, false)
 
-    /* Commented for dealing with cache
-    //Writes to File
-    //Writes Kanji (multiple files)
-    kanjis.write.mode(SaveMode.Overwrite).json("output")
-    //Writes Kanji (single file)
-    kanjis.coalesce(1).write.mode(SaveMode.Overwrite).json("outputSF")
-    kanjis.coalesce(1).write.mode(SaveMode.Overwrite).parquet(ScalaConfig.kanjiCache)
-    //Writes vocabulary (potencially huge, must check)
-    //vocabulary.coalesce(1).write.mode(SaveMode.Overwrite).json("vocab")
-    vocabulary.coalesce(1).write.mode(SaveMode.Overwrite).parquet(ScalaConfig.vocabCache)
-*/
+    // --> Writes to File <--
+    //Writes Kanji
+    //Writes Kanji (default partitioning)
+    kanjis.write.mode(SaveMode.Overwrite).json("output-kanji-default")
+    //Writes Kanji (single partition)
+    kanjis.coalesce(1).write.mode(SaveMode.Overwrite).json("output-kanji-single")
+    //Writes Kanji (one partition per entry)
+    kanjis.repartition(kanjis.count().toInt).write.mode(SaveMode.Overwrite).json("output-kanji-individual")
+
+    //Writes Kanji with Vocab
+    //Writes Joint Vocab with Kanji (default partitioning)
+    jointKV.write.mode(SaveMode.Overwrite).json("output-kanji-with-vocab-default")
+    //Writes Joint Vocab with Kanji (single partition)
+    jointKV.coalesce(1).write.mode(SaveMode.Overwrite).json("output-kanji-with-vocab-single")
+    //Writes Joint Vocab with Kanji (one partition per entry)
+    jointKV.repartition(jointKV.count().toInt).write.mode(SaveMode.Overwrite).json("output-kanji-with-vocab-individual")
+
+    //Writes Vocabulary
+    //Writes Vocabulary (default partitioning)
+    vocabulary.write.mode(SaveMode.Overwrite).json("output-vocab-default")
+    //Writes Vocabulary (single partition)
+    vocabulary.coalesce(1).write.mode(SaveMode.Overwrite).json("output-vocab-single")
+    //Writes Vocabulary (one partition per entry). Error: produces 360k files.
+//    vocabulary.repartition(vocabulary.count().toInt).write.mode(SaveMode.Overwrite).json("output-vocab-individual")
+
+    //Writes Vocab with Kanji
+    //Writes Joint Vocab with Kanji (default partitioning)
+    jointVK.write.mode(SaveMode.Overwrite).json("output-vocab-with-kanji-default")
+    //Writes Joint Vocab with Kanji (single partition)
+    jointVK.coalesce(1).write.mode(SaveMode.Overwrite).json("output-vocab-with-kanji-single")
+
   }
 }

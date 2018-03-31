@@ -21,3 +21,13 @@ output/
 outputSF/
 outputCache/kanjiCache
 outputCache/vocabCache
+output-kanji-individual/
+output-kanji-default/
+output-kanji-single/
+output-kanji-with-vocab-default/
+output-kanji-with-vocab-individual/
+output-kanji-with-vocab-single/
+output-vocab-default/
+output-vocab-single/
+output-vocab-with-kanji-default/
+output-vocab-with-kanji-single/
