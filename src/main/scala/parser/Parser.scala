@@ -61,11 +61,11 @@ object Parser {
       .withColumnRenamed("word", "wordK")
     kanjiPerVocab
   }
-  def printInfo(df: DataFrame, name: String = "")(numberToShow: Int = 50, count: Boolean = true, schema: Boolean = false) = {
+  def printInfo(df: DataFrame, name: String = "")(numberToShow: Int = 50, count: Boolean = true, schema: Boolean = false, truncateColumns: Boolean = true) = {
     if (count) println(s"$name DF has a total of ${df.count()} rows.")
     if (numberToShow > 0){
       println(s"$name DF, first $numberToShow rows:")
-      df.show(numberToShow)
+      df.show(numberToShow, truncateColumns)
     }
     if (schema) {
       println(s"$name DF Schema:")
@@ -117,7 +117,7 @@ object Parser {
       .withColumn("fKanji", trim(col("fKanji"))).withColumn("ffragments", trim(col("ffragments"))) //must trim to match
 
     val combinedMeanings = LocalCache.of(Config.mCombinedP, MeaningCombiner.combineMeanings(kanjidic, kanjiAlive, tanosKanji), true)
-    printInfo(combinedMeanings, "Meanings")()
+    printInfo(combinedMeanings, "Meanings")(truncateColumns = false)
 
     val vocabulary = LocalCache.of(Config.vocabPath, VocabularyParser.parseVocabulary(Config.FrequentWordsP, edict), true).cache()
     printInfo(vocabulary, "Vocabulary")(100)
@@ -184,6 +184,7 @@ object Parser {
 
     val kanjiPerVocab = extractKanjiPerVocab(vocabulary, kanjis)
     kanjiPerVocab.show(49, false)
+    //val simplifiedKanjiPerVocab =
 
     val jointVK = vocabulary.join(kanjiPerVocab, kanjiPerVocab("wordK") === vocabulary("word")).drop('wordK)
     jointVK.show(48, false)
@@ -209,7 +210,7 @@ object Parser {
 //
 //    //Writes Vocabulary
 //    //Writes Vocabulary (default partitioning)
-//    vocabulary.write.mode(SaveMode.Overwrite).json("output-vocab-default")
+//    vocabulary.repartition(600).write.mode(SaveMode.Overwrite).json("output-vocab-default")
 //    //Writes Vocabulary (single partition)
 //    vocabulary.coalesce(1).write.mode(SaveMode.Overwrite).json("output-vocab-single")
 //    //Writes Vocabulary (one partition per entry). Error: produces 360k files.

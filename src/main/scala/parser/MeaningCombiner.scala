@@ -7,14 +7,14 @@ object MeaningCombiner {
   def combineMeanings(kanjidic:DataFrame, kanjiAlive:DataFrame, tanosKanji:DataFrame)(implicit spark:SparkSession):DataFrame = {
     import spark.implicits._
 
-    def combineAllMeanings(meanings: Seq[Row], tanosMeaning: Seq[(String, String)], kaMeanings: Seq[(String, String)]): Seq[(String, String)] = {
+    def combineAllMeanings(meanings: Seq[Row], tanosMeaning:  Seq[Row], kaMeanings:  Seq[Row]): Seq[(String, String)] = {
       val ms = if (meanings != null) meanings.map { case Row(x: String, y: String) => (x, y); case _ => ("", "") } else Seq[(String, String)]()
-      val tns = if (tanosMeaning != null) tanosMeaning else Seq[(String, String)]()
-      val kans = if (kaMeanings != null) kaMeanings else Seq[(String, String)]() //toSet
-      (ms ++ tns ++ kans).toSet.toSeq
+      val tns = if (tanosMeaning != null) tanosMeaning.map { case Row(x: String, y: String) => (x, y); case _ => ("", "") } else Seq[(String, String)]()
+      val kans = if (kaMeanings != null) kaMeanings.map { case Row(x: String, y: String) => (x, y); case _ => ("", "") } else Seq[(String, String)]()
+      (ms ++ tns ++ kans).distinct
     }
 
-    val toCombinedMeaningsSet = udf((meanings: Seq[Row], tanosMeaning: Seq[(String, String)], kaMeanings: Seq[(String, String)]) => combineAllMeanings(meanings, tanosMeaning, kaMeanings))
+    val toCombinedMeaningsSet = udf((meanings: Seq[Row], tanosMeaning: Seq[Row], kaMeanings: Seq[Row]) => combineAllMeanings(meanings, tanosMeaning, kaMeanings))
 
     def parseSimpleEnglish(s: String): Seq[(String, String)] = if (s != null) s.trim.split(", ").map(t => ("en", t)) else Seq[(String, String)]()
     val toTranslationArray = udf((s: String) => parseSimpleEnglish(s))
