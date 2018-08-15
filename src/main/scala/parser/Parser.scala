@@ -189,6 +189,9 @@ object Parser {
     val jointVK = vocabulary.join(kanjiPerVocab, kanjiPerVocab("wordK") === vocabulary("word")).drop('wordK)
     jointVK.show(48, false)
 
+    val topVocabulary = vocabulary.filter('totalOcurrences.gt(1000)) //2000 = 15k words, 1000 = 24k words, 750 = 28k words, 500 = 34k words, 100 = 75k words, 50 = 99k words, 0 = 299k words
+    val topVK = jointVK.filter('totalOcurrences.gt(1000))
+
     println("---> End of transformations <---")
 
 //    // --> Writes to File <--
@@ -215,12 +218,18 @@ object Parser {
 //    vocabulary.coalesce(1).write.mode(SaveMode.Overwrite).json("output-vocab-single")
 //    //Writes Vocabulary (one partition per entry). Error: produces 360k files.
 ////    vocabulary.repartition(vocabulary.count().toInt).write.mode(SaveMode.Overwrite).json("output-vocab-individual")
+
+      //--Writes Top Vocabulary with Kanji
+      topVocabulary.repartition(600).write.mode(SaveMode.Overwrite).json("output-top-vocab-default")
 //
 //    //Writes Vocab with Kanji
 //    //Writes Joint Vocab with Kanji (default partitioning)
 //    jointVK.write.mode(SaveMode.Overwrite).json("output-vocab-with-kanji-default")
 //    //Writes Joint Vocab with Kanji (single partition)
 //    jointVK.coalesce(1).write.mode(SaveMode.Overwrite).json("output-vocab-with-kanji-single")
+
+    //--Writes Top Vocabulary with Kanji
+    topVK.repartition(600).write.mode(SaveMode.Overwrite).json("output-top-vocab-default")
 
   }
 }
