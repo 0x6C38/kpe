@@ -3,15 +3,17 @@ package parser
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 
+case class Meaning(lang:String, meaning:String)
+
 object MeaningCombiner {
   def combineMeanings(kanjidic:DataFrame, kanjiAlive:DataFrame, tanosKanji:DataFrame)(implicit spark:SparkSession):DataFrame = {
     import spark.implicits._
 
-    def combineAllMeanings(meanings: Seq[Row], tanosMeaning:  Seq[Row], kaMeanings:  Seq[Row]): Seq[(String, String)] = {
+    def combineAllMeanings(meanings: Seq[Row], tanosMeaning:  Seq[Row], kaMeanings:  Seq[Row]): Seq[Meaning] = {
       val ms = if (meanings != null) meanings.map { case Row(x: String, y: String) => (x, y); case _ => ("", "") } else Seq[(String, String)]()
       val tns = if (tanosMeaning != null) tanosMeaning.map { case Row(x: String, y: String) => (x, y); case _ => ("", "") } else Seq[(String, String)]()
       val kans = if (kaMeanings != null) kaMeanings.map { case Row(x: String, y: String) => (x, y); case _ => ("", "") } else Seq[(String, String)]()
-      (ms ++ tns ++ kans).distinct
+      (ms ++ tns ++ kans).distinct.map(m => Meaning(m._1, m._2))
     }
 
     val toCombinedMeaningsSet = udf((meanings: Seq[Row], tanosMeaning: Seq[Row], kaMeanings: Seq[Row]) => combineAllMeanings(meanings, tanosMeaning, kaMeanings))
