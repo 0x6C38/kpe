@@ -10,22 +10,15 @@ lazy val root = (project in file(".")).
     name := "KPE-Spark"
   )
 
+//val circeVersion = "0.9.3"
+//
+//libraryDependencies ++= Seq(
+//  "io.circe" %% "circe-core",
+//  "io.circe" %% "circe-generic",
+//  "io.circe" %% "circe-parser"
+//).map(_ % circeVersion)
 
 /*
-val circeVersion = "0.8.0"
-
-libraryDependencies ++= Seq(
-  "io.circe" %% "circe-core",
-  "io.circe" %% "circe-generic",
-  "io.circe" %% "circe-parser"
-).map(_ % circeVersion)
-
-libraryDependencies += "io.iteratee" % "iteratee-core_2.11" % "0.12.0"
-libraryDependencies += "io.iteratee" %% "iteratee-scalaz" % "0.12.0"
-libraryDependencies += "org.scalaz" %% "scalaz-core" % "7.2.14"
-libraryDependencies += "org.scalaz" %% "scalaz-iteratee" % "7.2.14"
-libraryDependencies += "org.scalaz" %% "scalaz-concurrent" % "7.2.14"
-
 //unmanagedJars in Compile += file("lib/kpe-1.0.25.jar")
 */
 

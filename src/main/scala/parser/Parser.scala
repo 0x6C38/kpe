@@ -98,8 +98,13 @@ object Parser {
     val kanjidic = LocalCache.of(Config.kanjidicPath, KanjidicParser.parseKanjidic(Config.kanjidicPath), true)
     printInfo(kanjidic, "Kanjidic")()
 
+//    val newKanjiAlive = spark.read.json("./output-new-kanjiAlive/part-00000-6f0107a3-b3ef-4ccc-acd8-05c7ab7babf3-c000.json")
+//    printInfo(newKanjiAlive, "NewKanjiAlive")(schema = true, truncateColumns = false)
+
     val kanjiAlive = LocalCache.of(Config.KanjiAliveP,KanjiAliveParser.parseKanjiAlive(Config.KanjiAliveP), true)
-    printInfo(kanjiAlive, "KanjiAlive")()
+    printInfo(kanjiAlive, "KanjiAlive")(schema = true, truncateColumns = false)
+
+//    kanjiAlive.coalesce(1).write.mode(SaveMode.Overwrite).json("output-new-kanjiAlive")
 
     val tanosKanji = LocalCache.of(Config.KanjiTanosPFreq, TanosParser.parseTanos(Config.KanjiTanosPFreq), true)
     printInfo(tanosKanji, "Tanos Kanji")()
