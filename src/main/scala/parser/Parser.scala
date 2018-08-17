@@ -98,13 +98,8 @@ object Parser {
     val kanjidic = LocalCache.of(Config.kanjidicPath, KanjidicParser.parseKanjidic(Config.kanjidicPath), true)
     printInfo(kanjidic, "Kanjidic")()
 
-//    val newKanjiAlive = spark.read.json("./output-new-kanjiAlive/part-00000-6f0107a3-b3ef-4ccc-acd8-05c7ab7babf3-c000.json")
-//    printInfo(newKanjiAlive, "NewKanjiAlive")(schema = true, truncateColumns = false)
-
     val kanjiAlive = LocalCache.of(Config.KanjiAliveP,KanjiAliveParser.parseKanjiAlive(Config.KanjiAliveP), true)
     printInfo(kanjiAlive, "KanjiAlive")(schema = true, truncateColumns = false)
-
-//    kanjiAlive.coalesce(1).write.mode(SaveMode.Overwrite).json("output-new-kanjiAlive")
 
     val tanosKanji = LocalCache.of(Config.KanjiTanosPFreq, TanosParser.parseTanos(Config.KanjiTanosPFreq), true)
     printInfo(tanosKanji, "Tanos Kanji")()
@@ -186,10 +181,8 @@ object Parser {
     val jointKV = kanjis.join(vocabPerKanji, kanjis("kanji") === vocabPerKanji("vocabK"), "left").drop('vocabK)
     jointKV.show(50)
 
-
     val kanjiPerVocab = extractKanjiPerVocab(vocabulary, kanjis)
     kanjiPerVocab.show(49, false)
-    //val simplifiedKanjiPerVocab =
 
     val jointVK = vocabulary.join(kanjiPerVocab, kanjiPerVocab("wordK") === vocabulary("word")).drop('wordK)
     jointVK.show(48, false)
@@ -202,7 +195,7 @@ object Parser {
 //    // --> Writes to File <--
 //    //Writes Kanji
 //    //Writes Kanji (default partitioning)
-//    kanjis.write.mode(SaveMode.Overwrite).json("output-kanji-default")
+    kanjis.write.mode(SaveMode.Overwrite).json("output-kanji-default")
 //    //Writes Kanji (single partition)
 //    kanjis.coalesce(1).write.mode(SaveMode.Overwrite).json("output-kanji-single")
 //    //Writes Kanji (one partition per entry)
@@ -210,7 +203,7 @@ object Parser {
 //
 //    //Writes Kanji with Vocab
 //    //Writes Joint Vocab with Kanji (default partitioning)
-//    jointKV.write.mode(SaveMode.Overwrite).json("output-kanji-with-vocab-default")
+    jointKV.write.mode(SaveMode.Overwrite).json("output-kanji-with-vocab-default")
 //    //Writes Joint Vocab with Kanji (single partition)
 //    jointKV.coalesce(1).write.mode(SaveMode.Overwrite).json("output-kanji-with-vocab-single")
 //    //Writes Joint Vocab with Kanji (one partition per entry)
@@ -218,13 +211,13 @@ object Parser {
 //
 //    //Writes Vocabulary
 //    //Writes Vocabulary (default partitioning)
-//    vocabulary.repartition(600).write.mode(SaveMode.Overwrite).json("output-vocab-default")
+    vocabulary.repartition(600).write.mode(SaveMode.Overwrite).json("output-vocab-default")
 //    //Writes Vocabulary (single partition)
 //    vocabulary.coalesce(1).write.mode(SaveMode.Overwrite).json("output-vocab-single")
 //    //Writes Vocabulary (one partition per entry). Error: produces 360k files.
 ////    vocabulary.repartition(vocabulary.count().toInt).write.mode(SaveMode.Overwrite).json("output-vocab-individual")
 
-      //--Writes Top Vocabulary with Kanji
+      //--Writes Top Vocabulary
       topVocabulary.repartition(600).write.mode(SaveMode.Overwrite).json("output-top-vocab-default")
 //
 //    //Writes Vocab with Kanji
