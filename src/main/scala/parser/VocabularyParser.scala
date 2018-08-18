@@ -9,12 +9,12 @@ import sjt.JapaneseInstances._
 import sjt.JapaneseSyntax._
 
 import parser.Parser.spark
-
+case class Furigana(kanji:String, reading:String)
 object VocabularyParser {
   def parseVocabulary(path: String, edict: DataFrame)(implicit spark: SparkSession): DataFrame = {
     import spark.implicits._
     val uBaseForm = udf((word: String) => word.tokenize().headOption.map(_.getBaseForm()).getOrElse(""))
-    val uFurigana = udf((word: String) => word.furigana().map(f => (f.original, f.kana.hiragana)))
+    val uFurigana = udf((word: String) => word.furigana().map(f => Furigana(f.original, f.kana.hiragana)))
     val uTransliterate = udf((japanese: String) => KanaTransliteration(japanese): KanaTransliteration)
 
     val uSum3 = udf((a: Int, b: Int, c: Int) => a + b + c)
