@@ -184,8 +184,22 @@ object Parser {
     val kanjiPerVocab = extractKanjiPerVocab(vocabulary, kanjis)
     kanjiPerVocab.show(49, false)
 
-    val jointVK = vocabulary.join(kanjiPerVocab, kanjiPerVocab("wordK") === vocabulary("word")).drop('wordK)
+    val jointVK = vocabulary.join(kanjiPerVocab, kanjiPerVocab("wordK") === vocabulary("word")).drop('wordK).cache()
     jointVK.show(48, false)
+
+//    def jsonToAwsEntry(word:String, json:String):String = {
+//      "{\"PutRequest\": {\"Item\": {\"word\": {\"S\": \"" + word + "\"},\"data\": {\"S\": \"" + json.replaceAll("\"", "\\\\\"") + "\"}}}}"
+//    }
+//    val ujsonToAwsEntry = udf((word:String, json:String) => jsonToAwsEntry(word, json))
+//
+//    import org.apache.spark.sql.functions.to_json
+//    val awsEntries = jointVK.withColumn("allZipped", struct(jointVK.columns.head, jointVK.columns.tail: _*))
+//        .select(ujsonToAwsEntry('word, to_json('allZipped).as('json)).as('awsEntry))
+
+    val awsEntries = AwsJsonEntryConverter.convertToAwsJsonEntry(jointVK)
+    awsEntries.show(48, false)
+    awsEntries.repartition(600).write.mode(SaveMode.Overwrite).text("output-aws-entries")
+
 
     val topVocabulary = vocabulary.filter('totalOcurrences.gt(1000)) //2000 = 15k words, 1000 = 24k words, 750 = 28k words, 500 = 34k words, 100 = 75k words, 50 = 99k words, 0 = 299k words
     val topVK = jointVK.filter('totalOcurrences.gt(1000))
@@ -195,7 +209,7 @@ object Parser {
 //    // --> Writes to File <--
 //    //Writes Kanji
 //    //Writes Kanji (default partitioning)
-    kanjis.write.mode(SaveMode.Overwrite).json("output-kanji-default")
+//    kanjis.write.mode(SaveMode.Overwrite).json("output-kanji-default")
 //    //Writes Kanji (single partition)
 //    kanjis.coalesce(1).write.mode(SaveMode.Overwrite).json("output-kanji-single")
 //    //Writes Kanji (one partition per entry)
@@ -203,7 +217,7 @@ object Parser {
 //
 //    //Writes Kanji with Vocab
 //    //Writes Joint Vocab with Kanji (default partitioning)
-    jointKV.write.mode(SaveMode.Overwrite).json("output-kanji-with-vocab-default")
+//    jointKV.write.mode(SaveMode.Overwrite).json("output-kanji-with-vocab-default")
 //    //Writes Joint Vocab with Kanji (single partition)
 //    jointKV.coalesce(1).write.mode(SaveMode.Overwrite).json("output-kanji-with-vocab-single")
 //    //Writes Joint Vocab with Kanji (one partition per entry)
@@ -211,14 +225,14 @@ object Parser {
 //
 //    //Writes Vocabulary
 //    //Writes Vocabulary (default partitioning)
-    vocabulary.repartition(600).write.mode(SaveMode.Overwrite).json("output-vocab-default")
+//    vocabulary.repartition(600).write.mode(SaveMode.Overwrite).json("output-vocab-default")
 //    //Writes Vocabulary (single partition)
 //    vocabulary.coalesce(1).write.mode(SaveMode.Overwrite).json("output-vocab-single")
 //    //Writes Vocabulary (one partition per entry). Error: produces 360k files.
 ////    vocabulary.repartition(vocabulary.count().toInt).write.mode(SaveMode.Overwrite).json("output-vocab-individual")
 
       //--Writes Top Vocabulary
-      topVocabulary.repartition(600).write.mode(SaveMode.Overwrite).json("output-top-vocab-default")
+//      topVocabulary.repartition(600).write.mode(SaveMode.Overwrite).json("output-top-vocab-default")
 //
 //    //Writes Vocab with Kanji
 //    //Writes Joint Vocab with Kanji (default partitioning)
@@ -227,7 +241,9 @@ object Parser {
 //    jointVK.coalesce(1).write.mode(SaveMode.Overwrite).json("output-vocab-with-kanji-single")
 
     //--Writes Top Vocabulary with Kanji
-    topVK.repartition(600).write.mode(SaveMode.Overwrite).json("output-top-vocab-default")
+//    topVK.repartition(600).write.mode(SaveMode.Overwrite).json("output-top-vocab-default")
+
+    //--Writes Aws Entries
 
   }
 }
