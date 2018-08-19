@@ -187,19 +187,8 @@ object Parser {
     val jointVK = vocabulary.join(kanjiPerVocab, kanjiPerVocab("wordK") === vocabulary("word")).drop('wordK).cache()
     jointVK.show(48, false)
 
-//    def jsonToAwsEntry(word:String, json:String):String = {
-//      "{\"PutRequest\": {\"Item\": {\"word\": {\"S\": \"" + word + "\"},\"data\": {\"S\": \"" + json.replaceAll("\"", "\\\\\"") + "\"}}}}"
-//    }
-//    val ujsonToAwsEntry = udf((word:String, json:String) => jsonToAwsEntry(word, json))
-//
-//    import org.apache.spark.sql.functions.to_json
-//    val awsEntries = jointVK.withColumn("allZipped", struct(jointVK.columns.head, jointVK.columns.tail: _*))
-//        .select(ujsonToAwsEntry('word, to_json('allZipped).as('json)).as('awsEntry))
-
     val awsEntries = AwsJsonEntryConverter.convertToAwsJsonEntry(jointVK)
     awsEntries.show(48, false)
-    awsEntries.repartition(600).write.mode(SaveMode.Overwrite).text("output-aws-entries")
-
 
     val topVocabulary = vocabulary.filter('totalOcurrences.gt(1000)) //2000 = 15k words, 1000 = 24k words, 750 = 28k words, 500 = 34k words, 100 = 75k words, 50 = 99k words, 0 = 299k words
     val topVK = jointVK.filter('totalOcurrences.gt(1000))
@@ -244,6 +233,7 @@ object Parser {
 //    topVK.repartition(600).write.mode(SaveMode.Overwrite).json("output-top-vocab-default")
 
     //--Writes Aws Entries
+    awsEntries.repartition(600).write.mode(SaveMode.Overwrite).text("output-aws-entries")
 
   }
 }
