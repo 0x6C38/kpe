@@ -193,6 +193,9 @@ object Parser {
     val topVocabulary = vocabulary.filter('totalOcurrences.gt(1000)) //2000 = 15k words, 1000 = 24k words, 750 = 28k words, 500 = 34k words, 100 = 75k words, 50 = 99k words, 0 = 299k words
     val topVK = jointVK.filter('totalOcurrences.gt(1000))
 
+    val awsTopEntries = AwsJsonEntryConverter.convertToAwsJsonEntry(topVocabulary)
+    awsTopEntries.show(48, false)
+
     println("---> End of transformations <---")
 
 //    // --> Writes to File <--
@@ -234,6 +237,8 @@ object Parser {
 
     //--Writes Aws Entries
     awsEntries.repartition(600).write.mode(SaveMode.Overwrite).text("output-aws-entries")
+    awsTopEntries.repartition(600).write.mode(SaveMode.Overwrite).text("output-aws-top-entries")
+    //./writeToDynamo.sh
 
   }
 }
