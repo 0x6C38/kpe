@@ -5,6 +5,8 @@ declare tn=$1
 # declare tn="vocab-test-table"
 declare directory=$2
 # declare directory="./models"
+declare x=$3
+# declare x=10
 
 # declare header='{"'${tn}'": ['
 declare header='{"RequestItems":{"'${tn}'": ['
@@ -13,7 +15,7 @@ declare header='{"RequestItems":{"'${tn}'": ['
 declare footer=']}}'
 
 for filename in $directory/*; do
-  while mapfile -t -n 10 ary && ((${#ary[@]})); do
+  while mapfile -t -n $x ary && ((${#ary[@]})); do
       sleep 0.5
       content="${ary[@]}"
       upload="$header"${content::-1}"$footer"
