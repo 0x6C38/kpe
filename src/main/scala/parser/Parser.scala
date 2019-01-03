@@ -194,10 +194,10 @@ object Parser {
     val topVK = jointVK.filter('totalOcurrences.gt(1000))
 
     val awsTopVocab = AwsJsonEntryConverter.convertWordToAwsJsonEntry(topVK)
-    awsTopVocab.show(48, false)
+    awsTopVocab.show(47, false)
 
     val awsKanjiEntries = AwsJsonEntryConverter.convertKanjiToAwsJsonEntry(jointKV)
-    awsKanjiEntries.show(48, false)
+    awsKanjiEntries.show(46, false)
 
     println("---> End of transformations <---")
 
