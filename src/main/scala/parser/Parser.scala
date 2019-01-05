@@ -187,11 +187,15 @@ object Parser {
     val jointVK = vocabulary.join(kanjiPerVocab, kanjiPerVocab("wordK") === vocabulary("word")).drop('wordK).cache()
     jointVK.show(48, false)
 
-    val awsWordEntries = AwsJsonEntryConverter.convertWordToAwsJsonEntry(jointVK)
-    awsWordEntries.show(48, false)
-
     val topVocabulary = vocabulary.filter('totalOcurrences.gt(1000)) //2000 = 15k words, 1000 = 24k words, 750 = 28k words, 500 = 34k words, 100 = 75k words, 50 = 99k words, 0 = 299k words
     val topVK = jointVK.filter('totalOcurrences.gt(1000))
+
+    val topVocabularySummary = Summarizer.summarizeWords(topVocabulary)
+    topVocabularySummary.show(57, false)
+
+
+    val awsWordEntries = AwsJsonEntryConverter.convertWordToAwsJsonEntry(jointVK)
+    awsWordEntries.show(48, false)
 
     val awsTopVocab = AwsJsonEntryConverter.convertWordToAwsJsonEntry(topVK)
     awsTopVocab.show(47, false)
@@ -239,10 +243,13 @@ object Parser {
 //    topVK.repartition(600).write.mode(SaveMode.Overwrite).json("output-top-vocab-default")
 
     //--Writes Aws Entries
-    awsWordEntries.repartition(600).write.mode(SaveMode.Overwrite).text("output-aws-word-entries")
-    awsTopVocab.repartition(600).write.mode(SaveMode.Overwrite).text("output-aws-top-word-entries")
-    awsKanjiEntries.repartition(600).write.mode(SaveMode.Overwrite).text("output-aws-kanji-entries")
+//    awsWordEntries.repartition(600).write.mode(SaveMode.Overwrite).text("output-aws-word-entries")
+//    awsTopVocab.repartition(600).write.mode(SaveMode.Overwrite).text("output-aws-top-word-entries")
+//    awsKanjiEntries.repartition(600).write.mode(SaveMode.Overwrite).text("output-aws-kanji-entries")
     //./writeToDynamo.sh
+
+    //--Writes Summaries
+    topVocabularySummary.coalesce(1).write.mode(SaveMode.Overwrite).csv("output-vocab-summary")
 
   }
 }
