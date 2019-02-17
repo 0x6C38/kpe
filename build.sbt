@@ -4,11 +4,18 @@ lazy val root = (project in file(".")).
   settings(
     inThisBuild(List(
       organization := "com.example",
-      scalaVersion := "2.11.8",
+      scalaVersion := "2.12.8",
       version      := "0.1.0-SNAPSHOT"
     )),
     name := "KPE-Spark"
   )
+
+//initialize := {
+//  val _ = initialize.value // run the previous initialization
+//  val required = "1.8"
+//  val current  = sys.props("java.specification.version")
+//  assert(current == required, s"Unsupported JDK: java.specification.version $current != $required")
+//}
 
 /*
 //unmanagedJars in Compile += file("lib/kpe-1.0.25.jar")
@@ -17,8 +24,8 @@ lazy val root = (project in file(".")).
 libraryDependencies += "com.atilika.kuromoji" % "kuromoji-ipadic" % "0.9.0"
 // Change this to another test framework if you prefer
 //libraryDependencies += "org.scalatest" %% "scalatest" % "2.2.4" % "test"
-libraryDependencies += "org.apache.spark" %% "spark-core" % "2.2.0"
-libraryDependencies += "org.apache.spark" %% "spark-sql" % "2.2.0"
+libraryDependencies += "org.apache.spark" %% "spark-core" % "2.4.0"
+libraryDependencies += "org.apache.spark" %% "spark-sql" % "2.4.0"
 
 libraryDependencies += "org.apache.hadoop" % "hadoop-yarn-common" % "2.8.0"
 libraryDependencies += "org.apache.hadoop" % "hadoop-yarn-client" % "2.8.0"
