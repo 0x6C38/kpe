@@ -190,10 +190,15 @@ object Parser {
     val topVocabulary = vocabulary.filter('totalOcurrences.gt(1000)) //2000 = 15k words, 1000 = 24k words, 750 = 28k words, 500 = 34k words, 100 = 75k words, 50 = 99k words, 0 = 299k words
     val topVK = jointVK.filter('totalOcurrences.gt(1000))
 
+//    ---
     val topVocabularySummary = Summarizer.summarizeWords(topVocabulary)
     topVocabularySummary.show(57, false)
 
+    val kanjiSummary = Summarizer.summarizeKanjis(kanjis)
+    kanjiSummary.show(58, false)
 
+
+//---
     val awsWordEntries = AwsJsonEntryConverter.convertWordToAwsJsonEntry(jointVK)
     awsWordEntries.show(48, false)
 
@@ -250,6 +255,7 @@ object Parser {
 
     //--Writes Summaries
     topVocabularySummary.coalesce(1).write.mode(SaveMode.Overwrite).csv("output-vocab-summary")
+    kanjiSummary.coalesce(1).write.mode(SaveMode.Overwrite).csv("output-kanji-summary")
 
   }
 }
