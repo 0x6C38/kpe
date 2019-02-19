@@ -254,8 +254,9 @@ object Parser {
     //./writeToDynamo.sh
 
     //--Writes Summaries
-    topVocabularySummary.coalesce(1).write.mode(SaveMode.Overwrite).csv("output-vocab-summary")
-    kanjiSummary.coalesce(1).write.mode(SaveMode.Overwrite).csv("output-kanji-summary")
+    topVocabularySummary.coalesce(1).write.mode(SaveMode.Overwrite).json("output-vocab-summary")
+    kanjiSummary.coalesce(1).write.mode(SaveMode.Overwrite).json("output-kanji-summary") // paste -s -d, output-kanji-summary/filename.json | xsel --clipboard --input | ADD BRACKETS []
+//    kanjiSummary.coalesce(1).write.mode(SaveMode.Overwrite).csv("output-kanji-summary")
 
   }
 }
