@@ -31,10 +31,10 @@ object Summarizer {
 
   def summarizeKanjis(df: DataFrame)(implicit spark: SparkSession): DataFrame = {
     import spark.implicits._
-    val uExtractRomaji = udf((r: Seq[Row]) => r.map{case Row(kr:Row,n:Long) => kr match {case Row(o:String,h:String, k:String, r:String) => r}}.mkString(""))
-    val uExtractHiragana = udf((r: Seq[Row]) => r.map{case Row(kr:Row,n:Long) => kr match {case Row(o:String,h:String, k:String, r:String) => h}}.mkString(""))
+    val uExtractRomaji = udf((r: Seq[Row]) => r.map{case Row(kr:Row,n:Long) => kr match {case Row(o:String,h:String, k:String, r:String) => r}}.mkString(", "))
+    val uExtractHiragana = udf((r: Seq[Row]) => r.map{case Row(kr:Row,n:Long) => kr match {case Row(o:String,h:String, k:String, r:String) => h}}.mkString(", "))
     val uSummarizeMeaningsArray = udf((xs: Seq[Row]) => xs.filter { case Row(x: String, y: String) => x == "en"; case _ => false }.map { case Row(x: String, y: String) => y; case _ => false }.distinct.mkString(", "))
-    df.select('kanji, 'rank, uSummarizeMeaningsArray('meanings) as "meanings", uExtractRomaji('kunYomi) as "romajiKun", uExtractRomaji('onYomi) as "romajiOn", uExtractHiragana('kunYomi) as "hiraganaKun", uExtractHiragana('onYomi) as "hiraganaOn") //,'totalOcurrences
+    df.select('kanji, uSummarizeMeaningsArray('meanings) as "meanings", uExtractRomaji('kunYomi) as "romajiKun", uExtractRomaji('onYomi) as "romajiOn", uExtractHiragana('kunYomi) as "hiraganaKun", uExtractHiragana('onYomi) as "hiraganaOn") //,'totalOcurrences, 'rank,
 
   }
 
