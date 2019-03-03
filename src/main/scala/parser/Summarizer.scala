@@ -12,7 +12,7 @@ object Summarizer {
     import spark.implicits._
     val uSummarizeArray = udf((xs: Seq[String]) => xs match {
       case null => ""
-      case _ => xs.foldLeft("")((z, i) => if ((z ++ i).length <= 30 || z == "") z ++ ", " ++ i else z).mkString.replaceFirst(", ", "") //Bug with some meanings?Joint?  //.take(Math.min(2, xs.size)).mkString(", ")
+      case _ => xs.foldLeft("")((z, i) => if ((z ++ i).length <= 30 || z == "") z ++ ", " ++ i else z).mkString.replaceAll("\"", "'").replaceFirst(", ", "") //Bug with some meanings?Joint?  //.take(Math.min(2, xs.size)).mkString(", ")
     })
 
     val uExtractHiragana = udf((r: Row) => r match {
