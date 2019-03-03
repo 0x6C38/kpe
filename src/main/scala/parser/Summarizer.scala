@@ -25,7 +25,7 @@ object Summarizer {
       case _ => ""
     })
 
-    df.select('word, uSummarizeArray('translations) as "meaning") //,'totalOcurrences, 'rank, uExtractHiragana('transliterations) as "kana", uExtractRomaji('transliterations) as "romaji"
+    df.select('word as "w", uSummarizeArray('translations) as "m") //,'totalOcurrences, 'rank, uExtractHiragana('transliterations) as "kana", uExtractRomaji('transliterations) as "romaji"
   }
 
 

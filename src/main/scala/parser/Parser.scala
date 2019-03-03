@@ -90,7 +90,7 @@ object Parser {
 
     //    val translationsDictionary = spark.read.json(ScalaConfig.JmDicP) //incorrect formatting //Should eventually use instead of EDICT
     val edict = LocalCache.of(Config.Edict, EdictParser.parseEdict(Config.Edict), true)
-    printInfo(edict, "Edict")()
+    printInfo(edict, "Edict")(truncateColumns = false)
 
     val kanjiFreqs = FreqParser.parseAll(Config.aoFreq, Config.twitterFreq, Config.wikipediaFreq, Config.newsFreq, Config.allFreqs)
     printInfo(kanjiFreqs, "Kanji Freqs")()
@@ -187,11 +187,11 @@ object Parser {
     val jointVK = vocabulary.join(kanjiPerVocab, kanjiPerVocab("wordK") === vocabulary("word")).drop('wordK).cache()
     jointVK.show(48, false)
 
-    val topVocabulary = vocabulary.filter('totalOcurrences.gt(1000)) //2000 = 15k words, 1000 = 24k words, 750 = 28k words, 500 = 34k words, 100 = 75k words, 50 = 99k words, 0 = 299k words
+    val topVocabulary = vocabulary.filter('totalOcurrences.gt(1000)) //4000 = 9.4k words, 2000 = 15k words, 1000 = 24k words, 750 = 28k words, 500 = 34k words, 100 = 75k words, 50 = 99k words, 0 = 299k words
     val topVK = jointVK.filter('totalOcurrences.gt(1000))
 
 //    ---
-    val topVocabularySummary = Summarizer.summarizeWords(topVocabulary)
+    val topVocabularySummary = Summarizer.summarizeWords(topVocabulary.filter('totalOcurrences.gt(4000)))
     topVocabularySummary.show(57, false)
 
     val kanjiSummary = Summarizer.summarizeKanjis(kanjis)
@@ -254,8 +254,8 @@ object Parser {
     //./writeToDynamo.sh
 
     //--Writes Summaries
-    topVocabularySummary.coalesce(1).write.mode(SaveMode.Overwrite).json("output-vocab-summary")
-    kanjiSummary.coalesce(1).write.mode(SaveMode.Overwrite).json("output-kanji-summary") // REPLACE END OF LIFE WITH COMMA | paste -s -d, output-kanji-summary/filename.json | xsel --clipboard --input | & ADD BRACKETS []
+    topVocabularySummary.coalesce(1).write.mode(SaveMode.Overwrite).json("output-vocab-summary") // (REPLACE END OF LINE WITH COMMA) paste -s -d, output-vocab-summary/filename.json | xsel --clipboard --input | & ADD BRACKETS []
+    kanjiSummary.coalesce(1).write.mode(SaveMode.Overwrite).json("output-kanji-summary") // (REPLACE END OF LINE WITH COMMA) paste -s -d, output-kanji-summary/filename.json | xsel --clipboard --input | & ADD BRACKETS []
 //    kanjiSummary.coalesce(1).write.mode(SaveMode.Overwrite).csv("output-kanji-summary")
 
   }
